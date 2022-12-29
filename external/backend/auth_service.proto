@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+option go_package = "proctor-signal/external/backend";
+
+package signal.backend;
+
+message RegisterRequest {
+  string secret = 1;
+  string version = 2;
+  // other metadata
+}
+
+message RegisterResponse {
+  int32 status_code = 1;
+  optional string reason = 2;
+  optional string token = 3;
+  optional string instance_id = 4;
+}
+
+message RenewTokenRequest {
+  string secret = 1;
+  string version = 2;
+  string token = 3;
+  string instance_id = 4;
+}
+
+message RenewTokenResponse {
+  int32 status_code = 1;
+  optional string reason = 2;
+  optional string token = 3;
+}
+
+message GracefulExitRequest {
+  string reason = 1;
+}
+
+message GracefulExitResponse {
+  int32 status_code = 1;
+  optional string reason = 2;
+}

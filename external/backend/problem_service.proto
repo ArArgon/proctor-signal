@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+import "model/model.proto";
+
+option go_package = "proctor-signal/external/backend";
+
+package signal.backend;
+
+message GetProblemRequest {
+  string id = 1;
+  optional string ver = 2;
+}
+
+message GetProblemResponse {
+  int32 status_code = 1;
+  optional string reason = 2;
+  optional signal.model.Problem data = 3;
+}
+
+message FetchJudgeTaskRequest {
+  string bearer_token = 1;
+}
+
+message FetchJudgeTaskResponse {
+  int32 status_code = 1;
+  optional string reason = 2;
+  optional signal.model.Submission task = 3;
+}
+
+message CompleteJudgeTaskRequest {
+  signal.model.JudgeResult result = 1;
+}
+
+message CompleteJudgeTaskResponse {
+  int32 status_code = 1;
+  optional string reason = 2;
+}

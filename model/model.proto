@@ -1,0 +1,221 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "proctor-signal/model";
+
+package signal.model;
+
+enum DiffPolicy {
+  LINE = 0;
+  INTEGER = 1;
+  FLOAT = 2;
+  BINARY = 3;
+  CUSTOM = 4;
+}
+
+message Problem {
+  // Problem ID.
+  string id = 1;
+
+  // Problem version.
+  string ver = 2;
+
+  enum ProblemKind {
+    // Classic comparison-based.
+    CLASSIC = 0;
+
+    // Special-judge required.
+    SPECIAL = 1;
+  }
+
+  // Problem type.
+  ProblemKind kind = 3;
+
+  // Output diff policy, only applicable for the `classic` type.
+  DiffPolicy diff_policy = 4;
+
+  // Special Judge program key.
+  optional string spj_binary_key = 5;
+
+  // Whether the diff ignores the last new line.
+  bool ignore_newline = 6;
+
+  // Whether the diff is case-sensitive.
+  bool case_sensitive = 7;
+
+  // Float epsilon in `FLOAT` mode.
+  optional uint32 float_eps = 8;
+
+  // The input file name. Empty if `from_stdin` is true.
+  string input_file = 9;
+
+  // Indicates whether the testing program will read from stdin.
+  bool from_stdin = 10;
+
+  // The output file name. Empty if `from_stdout` is true.
+  string output_file = 11;
+
+  // Indicates whether the testing program will write answer to stdin.
+  bool from_stdout = 12;
+
+  // Default time limit for each test case (in milliseconds). It can be overridden by lower-level constraints.
+  uint32 default_time_limit = 13;
+
+  // Default space limit for each test case (in MiB). It can be overridden by lower-level constraints.
+  uint32 default_space_limit = 14;
+
+  // Extra configuration attributes. Reserved for future use.
+  reserved 15 to 20;
+
+  // Subtasks.
+  repeated Subtask subtasks = 21;
+}
+
+enum ScorePolicy {
+  // Scored by the sum of all testcases.
+  SUM = 0;
+
+  // Scored by the minimum score amongst all testcases.
+  MIN = 1;
+
+  // Scored by the average.
+  PCT = 2;
+}
+
+message Subtask {
+  uint32 id = 1;
+
+  // Conclusion.
+  Conclusion conclusion = 2;
+
+  // Total score of this subtask.
+  int32 score = 3;
+
+  // Score policy of this subtask.
+  ScorePolicy score_policy = 4;
+
+  // Dependencies. This subtask will be scored iff all its dependencies have passed (accepted).
+  repeated uint32 dependencies = 5;
+
+  // Subtask-level time limitation, which, if any, overrides problem-level constraint.
+  optional uint32 time_limit = 6;
+
+  // Subtask-level space limitation, which, if any, overrides problem-level constraint.
+  optional uint32 space_limit = 7;
+
+  // All attached test cases.
+  repeated TestCase test_cases = 8;
+}
+
+message TestCase {
+  uint32 id = 1;
+
+  // Input data key.
+  string input_key = 2;
+
+  // Indicate the size of the input data.
+  uint64 input_size = 3;
+
+  // Reference output key.
+  string output_key = 4;
+
+  // Indicate the size of the reference output.
+  uint64 output_size = 5;
+}
+
+message Submission {
+  string id = 1;
+  string problem_id = 2;
+  string problem_ver = 3;
+
+  // The programming language the code of this submission uses.
+  string language = 4;
+
+  // The compiler option the code of this submission uses.
+  string compiler_option = 5;
+
+  bytes source_code = 6;
+}
+
+enum Conclusion {
+  // copied from go-judge.
+  Invalid = 0;
+  Accepted = 1;
+  WrongAnswer = 2;      // Not used
+  PartiallyCorrect = 3; // Not used
+  MemoryLimitExceeded = 4;
+  TimeLimitExceeded = 5;
+  OutputLimitExceeded = 6;
+  FileError = 7;
+  NonZeroExitStatus = 8;
+  Signalled = 9;
+  DangerousSyscall = 10;
+  JudgementFailed = 11;    // Not used
+  InvalidInteraction = 12; // Not used
+  InternalError = 13;
+}
+
+message JudgeResult {
+  string submission_id = 1;
+  string problem_id = 2;
+
+  // The timestamp when the submission was received.
+  google.protobuf.Timestamp receive_time = 3;
+
+  // The timestamp when the submission was scored.
+  google.protobuf.Timestamp complete_time = 4;
+
+  Conclusion conclusion = 5;
+  int32 score = 6;
+
+  uint32 total_time = 7;
+  float total_space = 8;
+
+  optional string compiler_output = 9;
+
+  repeated SubtaskResult subtask_results = 10;
+}
+
+message SubtaskResult {
+  uint32 id = 1;
+
+  // Indicates whether this subtask has been run. When some of its dependencies failed, this subtask
+  // is not scored.
+  bool is_run = 2;
+
+  int32 score = 3;
+  ScorePolicy score_policy = 4;
+  Conclusion conclusion = 5;
+
+  uint32 total_time = 7;
+  float total_space = 8;
+
+  repeated CaseResult case_results = 9;
+}
+
+message CaseResult {
+  uint32 id = 1;
+
+  int32 score = 3;
+  Conclusion conclusion = 5;
+  DiffPolicy diff_policy = 6;
+
+  // Total time this case spent in MiB.
+  uint32 total_time = 7;
+
+  // Total space this case used in MiB.
+  float total_space = 8;
+
+  // The return value of the test program in this case.
+  int32 return_value = 9;
+
+  // The key of tester's output.
+  string output_key = 10;
+
+  // The size (in bytes) of tester's output.
+  uint64 output_size = 11;
+
+  // The truncated output (first 1 KiB).
+  optional string truncated_output = 12;
+}
