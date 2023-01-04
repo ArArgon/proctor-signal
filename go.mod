@@ -3,6 +3,7 @@ module proctor-signal
 go 1.19
 
 require (
+	github.com/cenkalti/backoff/v4 v4.2.0
 	github.com/criyle/go-judge v1.6.1
 	github.com/criyle/go-sandbox v0.9.13
 	github.com/pkg/errors v0.9.1
