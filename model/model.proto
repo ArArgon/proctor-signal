@@ -167,14 +167,15 @@ message JudgeResult {
   google.protobuf.Timestamp complete_time = 4;
 
   Conclusion conclusion = 5;
-  int32 score = 6;
+  optional string remark = 6;
+  int32 score = 7;
 
-  uint32 total_time = 7;
-  float total_space = 8;
+  uint32 total_time = 8;
+  float total_space = 9;
 
-  optional string compiler_output = 9;
+  optional string compiler_output = 10;
 
-  repeated SubtaskResult subtask_results = 10;
+  repeated SubtaskResult subtask_results = 11;
 }
 
 message SubtaskResult {

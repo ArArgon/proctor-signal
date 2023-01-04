@@ -21,12 +21,18 @@ type entry struct {
 	locks   int
 	id      string
 	version string
+	problem *model.Problem
+}
+
+func fromIDVer(id, ver string) *entry {
+	return &entry{id: id, version: ver}
 }
 
 func fromProblem(p *model.Problem) *entry {
 	return &entry{
 		id:      p.Id,
 		version: p.Ver,
+		problem: p,
 	}
 }
 
@@ -115,39 +121,84 @@ func (m *Manager) fetchRes(ctx context.Context, p *model.Problem) error {
 	return nil
 }
 
-func (m *Manager) PrepareAndLock(ctx context.Context, p *model.Problem) error {
+func (m *Manager) fetchProblem(ctx context.Context, id, version string) (*model.Problem, error) {
+	ver := &version
+	// `version` is optional.
+	if version == "" {
+		ver = nil
+	}
+
+	resp, err := m.backendCli.GetProblem(ctx, &backend.GetProblemRequest{
+		Id:  id,
+		Ver: ver,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, errors.Errorf("received a remote error when fetching problem, code: %d, reson: %s",
+			resp.StatusCode, resp.GetReason(),
+		)
+	}
+
+	if resp.Data == nil {
+		return nil, errors.New("received a remote error when fetching problem: empty problem")
+	}
+
+	return resp.Data, nil
+}
+
+func (m *Manager) HoldAndLock(ctx context.Context, id, version string) (*model.Problem, func(), error) {
 	m.mut.Lock()
 	defer m.mut.Unlock()
 
 	var (
-		id, version = p.Id, p.Ver
-		sugar       = m.logger.Sugar().With("problem_id", id, "problem_ver", version)
-		ent         = fromProblem(p)
-		key         = ent.Key()
+		sugar = m.logger.Sugar().With("problem_id", id, "problem_ver", version)
+		key   = fromIDVer(id, version).Key()
+		err   error
+		p     *model.Problem
 	)
 
-	if _, contains := m.problems[key]; contains {
-		m.problems[key].locks++
-		sugar.Info("problem already exists, lock count inc: ", m.problems[key].locks)
-		return nil
+	// Fetch problem & update `version` to the latest if given empty `version`.
+	if _, ok := m.problems[key]; !ok {
+		p, err = m.fetchProblem(ctx, id, version)
+		if err != nil {
+			sugar.With("err", err).Errorf("failed to fetch problem from remote")
+			return nil, nil, errors.WithMessagef(err, "failed to fetch problem from remote")
+		}
+
+		// Override default version & key.
+		version = p.Ver
+		key = fromProblem(p).Key()
 	}
 
-	if err := m.fetchRes(ctx, p); err != nil {
-		sugar.With("err", err).Errorf("failed to prepare source")
-		return errors.WithMessagef(err, "failed to prepare resource for task %s @ %s", id, version)
+	// Entry does not exist. Verify problem & fetch resources.
+	if _, ok := m.problems[key]; !ok {
+		// Verify problem.
+		// TODO: add cache to deter invalid problem in order to prevent flooding.
+		if err = verifyProblem(p); err != nil {
+			sugar.With("err", err).Errorf("problem failed to pass verification")
+			return nil, nil, errors.WithMessagef(err, "problem failed to pass verification")
+		}
+
+		if err = m.fetchRes(ctx, p); err != nil {
+			sugar.With("err", err).Errorf("failed to prepare source")
+			return nil, nil, errors.WithMessagef(err, "failed to prepare resource for task %s @ %s", id, version)
+		}
+		m.problems[key] = fromProblem(p)
 	}
 
-	ent.locks = 1
-	m.problems[key] = ent
+	m.problems[key].locks++
 
 	sugar.Info("successfully prepared and locked this problem")
-	return nil
+	return nil, func() { m.unlock(m.problems[key].problem) }, nil
 }
 
-func (m *Manager) Unlock(p *model.Problem) {
+func (m *Manager) unlock(p *model.Problem) {
 	m.mut.Lock()
-	e := entry{id: p.Id, version: p.Ver}
-	key := e.Key()
+	key := fromProblem(p).Key()
 	if _, contains := m.problems[key]; contains {
 		m.problems[key].locks--
 	}
