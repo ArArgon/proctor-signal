@@ -49,7 +49,8 @@ func (m *Manager) ExecuteCommand(ctx context.Context, cmd string) string {
 				&worker.Collector{Name: "stderr", Max: 10240},
 			},
 			CopyOut: []worker.CmdCopyOutFile{
-				{"stdout", true}, {"stderr", true},
+				{Name: "stdout", Optional: true},
+				{Name: "stderr", Optional: true},
 			},
 		}},
 	})
