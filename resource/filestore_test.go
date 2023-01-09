@@ -95,7 +95,7 @@ func TestFileStore(t *testing.T) {
 	t.Run("problem", func(t *testing.T) {
 		testSize := 5
 		entries := make([]*entry, 0, testSize)
-		files := make(map[string][]*problemReader)
+		files := make(map[string][]*sourceReader)
 		hash := make(map[string]string)
 
 		// Prepare problems and data.
@@ -106,13 +106,14 @@ func TestFileStore(t *testing.T) {
 			}
 			entries = append(entries, ent)
 			filesCnt := lo.Clamp(rand.Intn(20), 1, 20)
-			readers := lo.RepeatBy(filesCnt, func(index int) *problemReader {
+			readers := lo.RepeatBy(filesCnt, func(index int) *sourceReader {
 				dat := randomData(t)
 				key := utils.GenerateID()
 				hash[ent.Key()+"/"+key] = fmt.Sprintf("%x", sha1.Sum(dat))
-				return &problemReader{
+				return &sourceReader{
 					key:    key,
-					reader: bytes.NewReader(dat),
+					size:   tmpSize,
+					reader: io.NopCloser(bytes.NewReader(dat)),
 				}
 			})
 			files[ent.Key()] = readers
