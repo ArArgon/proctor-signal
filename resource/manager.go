@@ -64,6 +64,13 @@ type Manager struct {
 	logger   *zap.Logger
 }
 
+func sha(str string) string {
+	if str == "" {
+		return ""
+	}
+	return fmt.Sprintf("%x", sha1.Sum([]byte(str)))
+}
+
 func (m *Manager) fetchRes(ctx context.Context, p *model.Problem) error {
 	var (
 		sugar   = m.logger.Sugar().With("problem_id", p.Id, "problem_ver", p.Ver)
@@ -72,15 +79,15 @@ func (m *Manager) fetchRes(ctx context.Context, p *model.Problem) error {
 	)
 	for _, sub := range p.Subtasks {
 		for _, testcase := range sub.TestCases {
-			fileMap[testcase.InputKey] = p.InputFile
+			fileMap[sha(testcase.InputKey)] = p.InputFile
 			if !isSPJ {
-				fileMap[testcase.OutputKey] = p.OutputFile
+				fileMap[sha(testcase.OutputKey)] = p.OutputFile
 			}
 		}
 	}
 
 	if isSPJ {
-		fileMap[p.GetSpjBinaryKey()] = "judge"
+		fileMap[sha(p.GetSpjBinaryKey())] = "judge"
 	}
 
 	keys := lo.Filter(lo.Keys(fileMap), func(key string, _ int) bool { return key != "" })
@@ -106,7 +113,7 @@ func (m *Manager) fetchRes(ctx context.Context, p *model.Problem) error {
 		return errors.WithMessagef(err, "problem id: %s, ver: %s", p.Id, p.Ver)
 	}
 
-	err = m.fs.SaveProblem(fromProblem(p), lo.Map(keys, func(key string, _ int) *problemReader {
+	err = m.fs.saveProblem(fromProblem(p), lo.Map(keys, func(key string, _ int) *problemReader {
 		return &problemReader{
 			key:    key,
 			reader: bytes.NewReader(resp.Data[key].Data),
@@ -220,7 +227,7 @@ func (m *Manager) evictAll() error {
 		sugar.Infof("evicting problem %s, version %s", ent.id, ent.version)
 
 		// Evict the problem.
-		if err := m.fs.EvictProblem(ent); err != nil {
+		if err := m.fs.evictProblem(ent); err != nil {
 			sugar.With("problem", ent).Errorln("failed to evict problem: ", err)
 			multiErr = multierr.Append(multiErr, err)
 			continue
