@@ -1,0 +1,7 @@
+linters:
+  enable:
+    - gofmt
+    - cyclop
+issues:
+  exclude:
+    - "(field|func) `.+` is unused"
