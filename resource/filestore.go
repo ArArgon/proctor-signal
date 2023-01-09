@@ -59,27 +59,45 @@ func NewFileStore(logger *zap.Logger, loc string) (*FileStore, error) {
 	}, nil
 }
 
-func (m *FileStore) SaveProblem(ent *entry, readers []*problemReader) error {
+func (m *FileStore) saveProblem(ent *entry, readers []*problemReader) error {
 	var (
 		sugar = m.logger.Sugar().With("problem_id", ent.id, "problem_ver", ent.version)
 		loc   = path.Join(m.probLoc, ent.Key())
 		err   error
 		buf   = make([]byte, 512)
+		saved []string
 	)
 
 	sugar.Infof("dumping problem with %d files at %s", len(readers), loc)
+
+	m.mut.Lock()
+	defer m.mut.Unlock()
+
+	if _, err = os.Lstat(loc); err == nil {
+		sugar.Error("problem already exists")
+		return errors.Errorf("problem already exists, id:%s, ver:%s", ent.id, ent.version)
+	}
+
+	if err = os.Mkdir(loc, 0750); err != nil {
+		sugar.With("err", err).Errorf("failed to mkdir for the problem")
+		return errors.WithMessagef(err, "failed to mkdir for the problem id:%s, ver:%s", ent.id, ent.version)
+	}
 
 	defer func() {
 		if err != nil {
 			// Rollback.
 			sugar.Warnf("rolling back, removing %s", loc)
 			err = multierr.Append(err, os.RemoveAll(loc))
+			for _, k := range saved {
+				delete(m.probFiles, k)
+			}
 		}
 	}()
 
 	for _, r := range readers {
 		var f *os.File
 		resPath := path.Join(loc, r.key)
+		fileKey := path.Join(ent.Key(), r.key)
 
 		f, err = os.OpenFile(resPath, os.O_CREATE|os.O_RDWR|os.O_EXCL, 0644)
 
@@ -102,13 +120,15 @@ func (m *FileStore) SaveProblem(ent *entry, readers []*problemReader) error {
 		}
 
 		_ = f.Close()
+		m.probFiles[fileKey] = r.key
+		saved = append(saved, fileKey)
 		sugar.Infof("successfully saved file %s", resPath)
 	}
 
 	return nil
 }
 
-func (m *FileStore) EvictProblem(p *entry) error {
+func (m *FileStore) evictProblem(p *entry) error {
 	var (
 		key   = p.Key()
 		sugar = m.logger.Sugar().With("problem_id", p.id, "problem_ver", p.version)
@@ -116,7 +136,7 @@ func (m *FileStore) EvictProblem(p *entry) error {
 	)
 
 	m.mut.Lock()
-	defer m.mut.RLock()
+	defer m.mut.Unlock()
 
 	files, err := os.ReadDir(loc)
 	if err != nil {
@@ -161,7 +181,7 @@ func (m *FileStore) Add(name, path string) (string, error) {
 }
 
 // Remove removes one tmpFile and returns whether it is deleted. Should you want to evict staled problems,
-// consider RemoveProblemFile() or EvictProblem() instead.
+// consider evictProblem() instead.
 func (m *FileStore) Remove(id string) bool {
 	m.mut.Lock()
 	defer m.mut.Unlock()
@@ -171,8 +191,8 @@ func (m *FileStore) Remove(id string) bool {
 		return false
 	}
 
-	if err := os.Remove(loc); !errors.Is(err, os.ErrNotExist) {
-		m.logger.Sugar().With("err", err).Errorf("failed to remove file [id: %s] [loc: %s]", id, err)
+	if err := os.Remove(loc); err != nil && !errors.Is(err, os.ErrNotExist) {
+		m.logger.Sugar().With("err", err).Errorf("failed to remove file [id: %s] [loc: %s]", id, loc)
 		return false
 	}
 
@@ -182,8 +202,8 @@ func (m *FileStore) Remove(id string) bool {
 
 // Get retrieve the file with given id and its name. Names of problem cases could be identical, e.g.
 //
-// fe4aec942dd62c5b58d94b025ca2e15c7e49b2c5/1	-> problem.in (case 1)
-// d0c5e3fe827505b65dd18a3503d38d48290900c4/2	-> problem.in (case 2)
+// problem/fe4aec942dd62c5b58d94b025ca2e15c7e49b2c5/1	-> problem.in (case 1)
+// problem/d0c5e3fe827505b65dd18a3503d38d48290900c4/2	-> problem.in (case 2)
 //
 // However, names of tmp files are guaranteed to be unique.
 func (m *FileStore) Get(id string) (string, envexec.File) {
@@ -196,7 +216,7 @@ func (m *FileStore) Get(id string) (string, envexec.File) {
 		ok   bool
 	)
 
-	if strings.HasPrefix("problem/", id) {
+	if strings.HasPrefix(id, "problem/") {
 		// problem/:problem_key/:data_key
 		parts := strings.Split(id, "/")
 		if len(parts) != 3 {
@@ -229,7 +249,7 @@ func (m *FileStore) Get(id string) (string, envexec.File) {
 	return name, envexec.NewFileInput(loc)
 }
 
-// List returns all temporary data.
+// List returns all temporary data (id -> name).
 func (m *FileStore) List() map[string]string {
 	m.mut.RLock()
 	defer m.mut.RUnlock()
