@@ -13,37 +13,32 @@ type Graph[T any] struct {
 
 func (g *Graph[T]) IsDAG() bool {
 	var (
-		vis   = make(map[uint32]int, len(g.IDs))
-		stk   = make([]uint32, len(g.IDs))
-		pos   = 0
-		color = 0
+		vis      = make(map[uint32]bool, len(g.IDs))
+		stk      = make(map[uint32]bool, len(g.IDs))
+		isCyclic func(node uint32) bool
 	)
-	for _, id := range g.IDs {
-		if vis[id] != 0 {
-			continue
-		}
-		stk[pos] = id
-		pos++
-		vis[id] = color
-		color++
 
-		for pos > 0 {
-			top := stk[pos]
-			pos--
-
-			for _, nxt := range g.Next[top] {
-				if vis[nxt] == color {
-					return false
-				}
-				if vis[nxt] != 0 {
-					continue
-				}
-				vis[nxt] = color
-				stk[pos] = nxt
-				pos++
+	isCyclic = func(node uint32) bool {
+		stk[node] = true
+		vis[node] = true
+		for _, nxt := range g.Next[node] {
+			if stk[nxt] {
+				return true
+			}
+			if !vis[nxt] && isCyclic(nxt) {
+				return true
 			}
 		}
+		stk[node] = false
+		return false
 	}
+
+	for _, node := range g.IDs {
+		if !vis[node] && isCyclic(node) {
+			return false
+		}
+	}
+
 	return true
 }
 
@@ -74,6 +69,19 @@ func (g *Graph[T]) Traverse(f func(T) bool) (vis map[uint32]bool) {
 		}
 	}
 	return
+}
+
+// AddEdge adds an edge a -> b.
+func (g *Graph[T]) AddEdge(a, b uint32) {
+	if _, ok := g.Next[a]; !ok {
+		g.Next[a] = make([]uint32, 0)
+	}
+	g.Next[a] = append(g.Next[a], b)
+	g.In[b]++
+}
+
+func (g *Graph[T]) AddNode(id uint32, val T) {
+	g.Models[id] = val
 }
 
 func NewSubtaskGraph(p *Problem) *Graph[*Subtask] {
