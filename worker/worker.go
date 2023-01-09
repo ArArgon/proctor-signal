@@ -35,13 +35,14 @@ func (w *Worker) Start(ctx context.Context, logger *zap.Logger, concurrency int)
 
 func (w *Worker) spin(ctx context.Context, logger *zap.Logger, id int) {
 	sugar := logger.Sugar().With("worker_id", id).Named("worker_spin")
-	tick := time.Tick(time.Millisecond * 500)
+	tick := time.NewTicker(time.Millisecond * 500)
+	defer tick.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			sugar.Info("context cancelled, exiting")
 			return
-		case <-tick:
+		case <-tick.C:
 			ctx, cancel := context.WithDeadline(ctx, time.Now().Add(maxTimeout))
 			result, err := w.work(ctx, sugar.Named("sub_work"))
 			if result != nil {
