@@ -74,7 +74,7 @@ func sha(str string) string {
 func (m *Manager) fetchRes(ctx context.Context, p *model.Problem) error {
 	var (
 		sugar   = m.logger.Sugar().With("problem_id", p.Id, "problem_ver", p.Ver)
-		fileMap map[string]string
+		fileMap = make(map[string]string)
 		isSPJ   = p.GetKind() == model.Problem_SPECIAL
 	)
 	for _, sub := range p.Subtasks {
