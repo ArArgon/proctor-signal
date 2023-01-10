@@ -45,9 +45,9 @@ func TestGraph_Traverse(t *testing.T) {
 			3: true,
 			4: true,
 			5: true,
-			//6: false,
-			//7: false,
-			//8: false,
+			// 6: false,
+			// 7: false,
+			// 8: false,
 		}, vis)
 	})
 
@@ -92,12 +92,12 @@ func TestGraph_Traverse(t *testing.T) {
 
 		assert.Equal(t, map[uint32]bool{
 			1: true,
-			//2: false,
+			// 2: false,
 			3: true,
 			4: true,
 			5: true,
-			//6: false,
-			//7: false,
+			// 6: false,
+			// 7: false,
 			8: true,
 		}, vis)
 	})
@@ -124,10 +124,10 @@ func TestGraph_Traverse(t *testing.T) {
 			2: true,
 			3: true,
 			4: true,
-			//5: false,
-			//6: false,
+			// 5: false,
+			// 6: false,
 			7: true,
-			//8: false,
+			// 8: false,
 		}, vis)
 	})
 
@@ -154,10 +154,10 @@ func TestGraph_Traverse(t *testing.T) {
 			2: true,
 			3: true,
 			4: true,
-			//5: false,
+			// 5: false,
 			6: true,
-			//7: false,
-			//8: false,
+			// 7: false,
+			// 8: false,
 		}, vis)
 	})
 }

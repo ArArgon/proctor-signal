@@ -1,12 +1,14 @@
 package resource
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha1"
 	"fmt"
 	"io"
 	"sync"
+	"time"
+
+	"github.com/cenkalti/backoff/v4"
 
 	"proctor-signal/external/backend"
 	"proctor-signal/model"
@@ -16,6 +18,9 @@ import (
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 )
+
+const concurrency = 10
+const backoffInterval = time.Millisecond * 200
 
 type entry struct {
 	locks   int
@@ -36,16 +41,17 @@ func fromProblem(p *model.Problem) *entry {
 	}
 }
 
-type problemReader struct {
+type sourceReader struct {
 	key    string
-	reader io.Reader
+	size   int64
+	reader io.ReadCloser
 }
 
 func (p *entry) Key() string {
 	return fmt.Sprintf("%x", sha1.Sum([]byte(p.id+"/"+p.version)))
 }
 
-func NewResourceManager(logger *zap.Logger, backend backend.BackendServiceClient, fs *FileStore) *Manager {
+func NewResourceManager(logger *zap.Logger, backend backend.Client, fs *FileStore) *Manager {
 	return &Manager{
 		fs:         fs,
 		backendCli: backend,
@@ -57,7 +63,7 @@ func NewResourceManager(logger *zap.Logger, backend backend.BackendServiceClient
 
 type Manager struct {
 	fs         *FileStore
-	backendCli backend.BackendServiceClient
+	backendCli backend.Client
 
 	problems map[string]*entry
 	mut      sync.RWMutex
@@ -71,12 +77,56 @@ func sha(str string) string {
 	return fmt.Sprintf("%x", sha1.Sum([]byte(str)))
 }
 
+func fetchWorker(
+	ctx context.Context, backendCli backend.Client,
+	wg *sync.WaitGroup, keyChan <-chan string, resChan chan<- *sourceReader, errChan chan<- error,
+	sugar *zap.SugaredLogger,
+) {
+	sugar.Info("fetching worker started")
+	defer wg.Done()
+	for {
+		select {
+		case <-ctx.Done():
+			sugar.Info("context cancelled, exiting")
+			return
+		case key, ok := <-keyChan:
+			if !ok {
+				sugar.Info("channel closed, exiting")
+				return
+			}
+			err := backoff.Retry(
+				func() error {
+					size, reader, err := backendCli.GetResourceStream(ctx, backend.ResourceType_PROBLEM_DATA, key)
+					if err != nil {
+						return err
+					}
+					resChan <- &sourceReader{
+						key:    key,
+						size:   size,
+						reader: reader,
+					}
+					return nil
+				}, backoff.WithContext(
+					backoff.WithMaxRetries(backoff.NewConstantBackOff(backoffInterval), 5), ctx,
+				),
+			)
+			if err != nil {
+				sugar.With("err", err).Errorf("failed to get resource")
+				errChan <- errors.WithMessagef(err, "failed to get resource, key %s", key)
+				return
+			}
+		}
+	}
+}
+
 func (m *Manager) fetchRes(ctx context.Context, p *model.Problem) error {
 	var (
 		sugar   = m.logger.Sugar().With("problem_id", p.Id, "problem_ver", p.Ver)
 		fileMap = make(map[string]string)
 		isSPJ   = p.GetKind() == model.Problem_SPECIAL
 	)
+
+	// Collect resources to fetch.
 	for _, sub := range p.Subtasks {
 		for _, testcase := range sub.TestCases {
 			fileMap[sha(testcase.InputKey)] = p.InputFile
@@ -85,44 +135,76 @@ func (m *Manager) fetchRes(ctx context.Context, p *model.Problem) error {
 			}
 		}
 	}
-
 	if isSPJ {
 		fileMap[sha(p.GetSpjBinaryKey())] = "judge"
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	keys := lo.Filter(lo.Keys(fileMap), func(key string, _ int) bool { return key != "" })
-	resp, err := m.backendCli.GetResourceBatch(ctx, &backend.GetResourceBatchRequest{
-		Type: backend.ResourceType_PROBLEM_DATA,
-		Keys: keys,
-	})
-	if err != nil {
-		sugar.With("err", err).Errorf("failed to fetch resource from the backend")
-		return errors.WithMessagef(err, "failed to fetch resource from the backend, id: %s, ver: %s", p.Id, p.Ver)
+	wg := new(sync.WaitGroup)
+	keyChan := make(chan string, len(keys))
+	resChan := make(chan *sourceReader, concurrency)
+	errChan := make(chan error)
+	results := make([]*sourceReader, 0, len(keys))
+
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go fetchWorker(ctx, m.backendCli, wg, keyChan, resChan, errChan, sugar.With("worker.id", i))
 	}
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		err = errors.Errorf("remote err: %s", resp.GetReason())
-		sugar.With("err", err).Error("the backend returns an error when fetching res")
-		return errors.WithMessagef(err, "the backend returns an error, id: %s, ver: %s", p.Id, p.Ver)
+	// Result receiver.
+	go func() {
+		for res := range resChan {
+			results = append(results, res)
+		}
+	}()
+
+	var err error
+	// Err handler.
+	go func() {
+		var ok bool
+		err, ok = <-errChan
+		if !ok {
+			return
+		}
+		sugar.Errorf("received an error, killing all workers")
+		cancel()
+	}()
+
+	// Close all readers.
+	defer func() {
+		for _, r := range results {
+			_ = r.reader.Close()
+		}
+	}()
+
+	for _, key := range keys {
+		keyChan <- key
+	}
+	close(keyChan)
+
+	wg.Wait()
+	close(errChan)
+	close(resChan)
+
+	// Failed to fetch resource.
+	if err != nil {
+		sugar.With("err", err).Error("failed to fetch resource")
+		return errors.WithMessagef(err, "failed to fetch resource")
 	}
 
 	// Check if all have fetched.
-	if notFound, lost := lo.Find(keys, func(key string) bool { _, ok := resp.Data[key]; return ok }); lost {
-		err = errors.Errorf("resource (key: %s) not found in response", notFound)
-		sugar.With("err", err).Error("resource not found")
+	if len(keys) != len(results) {
+		err = errors.New("some resource(s) are missing")
+		sugar.Error("some resource(s) are missing, expecting: %d, got: %d", len(keys), len(results))
 		return errors.WithMessagef(err, "problem id: %s, ver: %s", p.Id, p.Ver)
 	}
 
-	err = m.fs.saveProblem(fromProblem(p), lo.Map(keys, func(key string, _ int) *problemReader {
-		return &problemReader{
-			key:    key,
-			reader: bytes.NewReader(resp.Data[key].Data),
-		}
-	}))
-
-	if err != nil {
+	if err = m.fs.saveProblem(fromProblem(p), results); err != nil {
 		sugar.With("err", err).Errorf("failed to save problem")
-		return err
+		return errors.WithMessagef(err, "failed to save problem")
 	}
 
 	return nil

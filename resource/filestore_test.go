@@ -19,7 +19,7 @@ import (
 	"proctor-signal/utils"
 )
 
-const tmpSize = 10 * 1048576
+const tmpSize = 5 * 1048576
 
 func randomData(t *testing.T) []byte {
 	res := make([]byte, tmpSize)
@@ -95,7 +95,8 @@ func TestFileStore(t *testing.T) {
 	t.Run("problem", func(t *testing.T) {
 		testSize := 5
 		entries := make([]*entry, 0, testSize)
-		files := make(map[string][]*problemReader)
+		files := make(map[string][]*sourceReader)
+		hash := make(map[string]string)
 
 		// Prepare problems and data.
 		for i := 0; i < testSize; i++ {
@@ -105,10 +106,14 @@ func TestFileStore(t *testing.T) {
 			}
 			entries = append(entries, ent)
 			filesCnt := lo.Clamp(rand.Intn(20), 1, 20)
-			readers := lo.RepeatBy(filesCnt, func(index int) *problemReader {
-				return &problemReader{
-					key:    utils.GenerateID(),
-					reader: bytes.NewReader(randomData(t)),
+			readers := lo.RepeatBy(filesCnt, func(index int) *sourceReader {
+				dat := randomData(t)
+				key := utils.GenerateID()
+				hash[ent.Key()+"/"+key] = fmt.Sprintf("%x", sha1.Sum(dat))
+				return &sourceReader{
+					key:    key,
+					size:   tmpSize,
+					reader: io.NopCloser(bytes.NewReader(dat)),
 				}
 			})
 			files[ent.Key()] = readers
@@ -128,6 +133,12 @@ func TestFileStore(t *testing.T) {
 				fileKey, f2 := fs.Get(p)
 				assert.Equal(t, fileKey, f.key)
 				assert.True(t, f2 != nil)
+				file := lo.Must(os.Open(f2.(*envexec.FileInput).Path))
+				assert.Equal(t,
+					hash[ent.Key()+"/"+f.key],
+					fmt.Sprintf("%x", sha1.Sum(lo.Must(io.ReadAll(file)))),
+				)
+				assert.NoError(t, file.Close())
 			}
 		}
 

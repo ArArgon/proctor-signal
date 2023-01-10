@@ -59,7 +59,7 @@ func NewFileStore(logger *zap.Logger, loc string) (*FileStore, error) {
 	}, nil
 }
 
-func (m *FileStore) saveProblem(ent *entry, readers []*problemReader) error {
+func (m *FileStore) saveProblem(ent *entry, readers []*sourceReader) error {
 	var (
 		sugar = m.logger.Sugar().With("problem_id", ent.id, "problem_ver", ent.version)
 		loc   = path.Join(m.probLoc, ent.Key())
@@ -98,6 +98,7 @@ func (m *FileStore) saveProblem(ent *entry, readers []*problemReader) error {
 		var f *os.File
 		resPath := path.Join(loc, r.key)
 		fileKey := path.Join(ent.Key(), r.key)
+		var written int64
 
 		f, err = os.OpenFile(resPath, os.O_CREATE|os.O_RDWR|os.O_EXCL, 0644)
 
@@ -112,14 +113,19 @@ func (m *FileStore) saveProblem(ent *entry, readers []*problemReader) error {
 			return errors.WithMessagef(err, "failed to open a new file for %s", r.key)
 		}
 
-		_, err = io.CopyBuffer(f, r.reader, buf)
+		written, err = io.CopyBuffer(f, r.reader, buf)
+		_ = f.Close()
+
 		if err != nil {
-			_ = f.Close()
 			sugar.With("err", err).Errorf("failed to save file %s", resPath)
 			return errors.WithMessagef(err, "failed to save file %s", resPath)
 		}
 
-		_ = f.Close()
+		if written != r.size {
+			sugar.Errorf("unexpected file size, written: %d, expecting: %d", written, r.size)
+			return errors.Errorf("unexpected file size, written: %d, expecting: %d", written, r.size)
+		}
+
 		m.probFiles[fileKey] = r.key
 		saved = append(saved, fileKey)
 		sugar.Infof("successfully saved file %s", resPath)
