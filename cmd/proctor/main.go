@@ -23,6 +23,7 @@ var logger *zap.Logger
 func main() {
 	conf := loadConf()
 	initLogger(conf)
+	gojudge.Logger = logger
 	sugar := logger.Sugar()
 
 	defer func() { _ = logger.Sync() }()

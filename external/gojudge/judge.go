@@ -22,10 +22,9 @@ import (
 	"github.com/criyle/go-judge/filestore"
 	"github.com/criyle/go-judge/worker"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
-var logger *zap.Logger
+var Logger *zap.Logger
 
 func init() {
 	conf := loadConf()
@@ -33,18 +32,17 @@ func init() {
 		fmt.Print(version.Version)
 		return
 	}
-	initLogger(conf)
-	defer logger.Sync()
-	logger.Sugar().Infof("config loaded: %+v", conf)
+	// initLogger(conf)
+	// defer logger.Sync()
 	initRand()
 	warnIfNotLinux()
 }
 
 func warnIfNotLinux() {
 	if runtime.GOOS != "linux" {
-		logger.Sugar().Warn("Platform is ", runtime.GOOS)
-		logger.Sugar().Warn("Please notice that the primary supporting platform is Linux")
-		logger.Sugar().Warn("Windows and macOS(darwin) support are only recommended in development environment")
+		Logger.Sugar().Warn("Platform is ", runtime.GOOS)
+		Logger.Sugar().Warn("Please notice that the primary supporting platform is Linux")
+		Logger.Sugar().Warn("Windows and macOS(darwin) support are only recommended in development environment")
 	}
 }
 
@@ -59,36 +57,36 @@ func loadConf() *config.Config {
 	return &conf
 }
 
-func initLogger(conf *config.Config) {
-	if conf.Silent {
-		logger = zap.NewNop()
-		return
-	}
+// func initLogger(conf *config.Config) {
+// 	if conf.Silent {
+// 		logger = zap.NewNop()
+// 		return
+// 	}
 
-	var err error
-	if conf.Release {
-		logger, err = zap.NewProduction()
-	} else {
-		config := zap.NewDevelopmentConfig()
-		config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-		if !conf.EnableDebug {
-			config.Level.SetLevel(zap.InfoLevel)
-		}
-		logger, err = config.Build()
-	}
-	if err != nil {
-		log.Fatalln("init logger failed ", err)
-	}
-}
+// 	var err error
+// 	if conf.Release {
+// 		logger, err = zap.NewProduction()
+// 	} else {
+// 		config := zap.NewDevelopmentConfig()
+// 		config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+// 		if !conf.EnableDebug {
+// 			config.Level.SetLevel(zap.InfoLevel)
+// 		}
+// 		logger, err = config.Build()
+// 	}
+// 	if err != nil {
+// 		log.Fatalln("init logger failed ", err)
+// 	}
+// }
 
 func initRand() {
 	var b [8]byte
 	_, err := crypto_rand.Read(b[:])
 	if err != nil {
-		logger.Fatal("random generator init failed ", zap.Error(err))
+		Logger.Fatal("random generator init failed ", zap.Error(err))
 	}
 	sd := int64(binary.LittleEndian.Uint64(b[:]))
-	logger.Sugar().Infof("random seed: %d", sd)
+	Logger.Sugar().Infof("random seed: %d", sd)
 	math_rand.Seed(sd)
 }
 
@@ -96,7 +94,7 @@ func Prefork(envPool worker.EnvironmentPool, prefork int) {
 	if prefork <= 0 {
 		return
 	}
-	logger.Sugar().Info("create ", prefork, " prefork containers")
+	Logger.Sugar().Info("create ", prefork, " prefork containers")
 	m := make([]envexec.Environment, 0, prefork)
 	for i := 0; i < prefork; i++ {
 		e, err := envPool.Get()
@@ -122,10 +120,10 @@ func NewEnvBuilder(conf *config.Config) pool.EnvBuilder {
 		EnableCPURate:      conf.EnableCPURate,
 		CPUCfsPeriod:       conf.CPUCfsPeriod,
 		SeccompConf:        conf.SeccompConf,
-		Logger:             logger.Sugar(),
+		Logger:             Logger.Sugar(),
 	})
 	if err != nil {
-		logger.Sugar().Fatal("create environment builder failed ", err)
+		Logger.Sugar().Fatal("create environment builder failed ", err)
 	}
 	if conf.EnableMetrics {
 		b = &metriceEnvBuilder{b}
@@ -163,7 +161,7 @@ func NewForceGCWorker(conf *config.Config) {
 			var mem runtime.MemStats
 			runtime.ReadMemStats(&mem)
 			if mem.HeapInuse > uint64(*conf.ForceGCTarget) {
-				logger.Sugar().Infof("Force GC as heap_in_use(%v) > target(%v)",
+				Logger.Sugar().Infof("Force GC as heap_in_use(%v) > target(%v)",
 					envexec.Size(mem.HeapInuse), *conf.ForceGCTarget)
 				runtime.GC()
 				debug.FreeOSMemory()
@@ -175,5 +173,5 @@ func NewForceGCWorker(conf *config.Config) {
 
 func CleanUpWorker(work worker.Worker) {
 	work.Shutdown()
-	logger.Sugar().Info("Worker shutdown")
+	Logger.Sugar().Info("Worker shutdown")
 }
