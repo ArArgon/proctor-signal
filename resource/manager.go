@@ -151,7 +151,7 @@ func (m *Manager) fetchRes(ctx context.Context, p *model.Problem) error {
 
 	for i := 0; i < concurrency; i++ {
 		wg.Add(1)
-		go fetchWorker(ctx, m.backendCli, wg, keyChan, resChan, errChan, sugar.With("worker.id", i))
+		go fetchWorker(ctx, m.backendCli, wg, keyChan, resChan, errChan, sugar.Named("fetch-worker"))
 	}
 
 	// Result receiver.
@@ -165,8 +165,7 @@ func (m *Manager) fetchRes(ctx context.Context, p *model.Problem) error {
 	// Err handler.
 	go func() {
 		var ok bool
-		err, ok = <-errChan
-		if !ok {
+		if err, ok = <-errChan; !ok {
 			return
 		}
 		sugar.Errorf("received an error, killing all workers")
@@ -239,6 +238,9 @@ func (m *Manager) fetchProblem(ctx context.Context, id, version string) (*model.
 	return resp.Data, nil
 }
 
+// HoldAndLock prepares the given problem if it does not exist in the fileStore and locks that problem
+// by increasing its lock semaphore. If HoldAndLock() returns a nil error, user should call the unlock
+// function in the return values once the problem is no longer needed.
 func (m *Manager) HoldAndLock(ctx context.Context, id, version string) (*model.Problem, func(), error) {
 	m.mut.Lock()
 	defer m.mut.Unlock()
@@ -258,7 +260,7 @@ func (m *Manager) HoldAndLock(ctx context.Context, id, version string) (*model.P
 			return nil, nil, errors.WithMessagef(err, "failed to fetch problem from remote")
 		}
 
-		// Override default version & key.
+		// Override default version & key. This is needed when the `version` is omitted.
 		version = p.Ver
 		key = fromProblem(p).Key()
 	}
@@ -273,7 +275,7 @@ func (m *Manager) HoldAndLock(ctx context.Context, id, version string) (*model.P
 		}
 
 		if err = m.fetchRes(ctx, p); err != nil {
-			sugar.With("err", err).Errorf("failed to prepare source")
+			sugar.With("err", err).Errorf("failed to prepare the resource")
 			return nil, nil, errors.WithMessagef(err, "failed to prepare resource for task %s @ %s", id, version)
 		}
 		m.problems[key] = fromProblem(p)
@@ -320,5 +322,3 @@ func (m *Manager) evictAll() error {
 	}
 	return multiErr
 }
-
-// problems/:sha(problem_id, version)/:input,:output,:spj
