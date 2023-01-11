@@ -27,6 +27,7 @@ type FileStore struct {
 
 	probLoc   string
 	probFiles map[string]string
+	shaToKey  map[string]string
 
 	logger *zap.Logger
 	mut    sync.RWMutex
@@ -54,6 +55,7 @@ func NewFileStore(logger *zap.Logger, loc string) (*FileStore, error) {
 		probLoc:   path.Join(loc, "persistent"),
 		tmpFiles:  make(map[string]string),
 		probFiles: make(map[string]string),
+		shaToKey:  make(map[string]string),
 		logger:    logger,
 		mut:       sync.RWMutex{},
 	}, nil
@@ -90,14 +92,15 @@ func (m *FileStore) saveProblem(ent *entry, readers []*sourceReader) error {
 			err = multierr.Append(err, os.RemoveAll(loc))
 			for _, k := range saved {
 				delete(m.probFiles, k)
+				delete(m.shaToKey, sha(k))
 			}
 		}
 	}()
 
 	for _, r := range readers {
 		var f *os.File
-		resPath := path.Join(loc, r.key)
-		fileKey := path.Join(ent.Key(), r.key)
+		resPath := path.Join(loc, sha(r.key))
+		fileKey := ent.Key() + "/" + r.key
 		var written int64
 
 		f, err = os.OpenFile(resPath, os.O_CREATE|os.O_RDWR|os.O_EXCL, 0644)
@@ -127,6 +130,7 @@ func (m *FileStore) saveProblem(ent *entry, readers []*sourceReader) error {
 		}
 
 		m.probFiles[fileKey] = r.key
+		m.shaToKey[sha(r.key)] = r.key
 		saved = append(saved, fileKey)
 		sugar.Infof("successfully saved file %s", resPath)
 	}
@@ -156,7 +160,7 @@ func (m *FileStore) evictProblem(p *entry) error {
 			continue
 		}
 
-		fileKey := key + "/" + f.Name()
+		fileKey := key + "/" + m.shaToKey[f.Name()]
 		delete(m.probFiles, fileKey)
 	}
 
@@ -231,7 +235,7 @@ func (m *FileStore) Get(id string) (string, envexec.File) {
 		}
 
 		key := path.Join(parts[1], parts[2])
-		loc = path.Join(m.probLoc, key)
+		loc = path.Join(m.probLoc, parts[1], sha(parts[2]))
 
 		if name, ok = m.probFiles[key]; !ok {
 			m.logger.Sugar().Infof("file not found: %s", key)
