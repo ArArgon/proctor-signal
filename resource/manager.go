@@ -122,31 +122,33 @@ func fetchWorker(
 func (m *Manager) fetchRes(ctx context.Context, p *model.Problem) error {
 	var (
 		sugar   = m.logger.Sugar().With("problem_id", p.Id, "problem_ver", p.Ver)
-		fileMap = make(map[string]string)
+		resKeys = make(map[string]bool)
 		isSPJ   = p.GetKind() == model.Problem_SPECIAL
 	)
 
 	// Collect resources to fetch.
 	for _, sub := range p.Subtasks {
 		for _, testcase := range sub.TestCases {
-			fileMap[sha(testcase.InputKey)] = p.InputFile
+			resKeys[testcase.InputKey] = true
 			if !isSPJ {
-				fileMap[sha(testcase.OutputKey)] = p.OutputFile
+				resKeys[testcase.OutputKey] = true
 			}
 		}
 	}
 	if isSPJ {
-		fileMap[sha(p.GetSpjBinaryKey())] = "judge"
+		resKeys[p.GetSpjBinaryKey()] = true
 	}
+	delete(resKeys, "")
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	keys := lo.Filter(lo.Keys(fileMap), func(key string, _ int) bool { return key != "" })
+	keys := lo.Filter(lo.Keys(resKeys), func(key string, _ int) bool { return key != "" })
 	wg := new(sync.WaitGroup)
 	keyChan := make(chan string, len(keys))
 	resChan := make(chan *sourceReader, concurrency)
 	errChan := make(chan error)
+	finRecv := make(chan struct{}, 1)
 	results := make([]*sourceReader, 0, len(keys))
 
 	for i := 0; i < concurrency; i++ {
@@ -159,17 +161,17 @@ func (m *Manager) fetchRes(ctx context.Context, p *model.Problem) error {
 		for res := range resChan {
 			results = append(results, res)
 		}
+		finRecv <- struct{}{}
 	}()
 
 	var err error
 	// Err handler.
 	go func() {
-		var ok bool
-		if err, ok = <-errChan; !ok {
-			return
+		for recvErr := range errChan {
+			err = multierr.Append(err, recvErr)
+			sugar.Errorf("received an error, killing all workers")
+			cancel()
 		}
-		sugar.Errorf("received an error, killing all workers")
-		cancel()
 	}()
 
 	// Close all readers.
@@ -188,6 +190,8 @@ func (m *Manager) fetchRes(ctx context.Context, p *model.Problem) error {
 	close(errChan)
 	close(resChan)
 
+	<-finRecv
+
 	// Failed to fetch resource.
 	if err != nil {
 		sugar.With("err", err).Error("failed to fetch resource")
@@ -197,7 +201,7 @@ func (m *Manager) fetchRes(ctx context.Context, p *model.Problem) error {
 	// Check if all have fetched.
 	if len(keys) != len(results) {
 		err = errors.New("some resource(s) are missing")
-		sugar.Error("some resource(s) are missing, expecting: %d, got: %d", len(keys), len(results))
+		sugar.Errorf("some resource(s) are missing, expecting: %d, got: %d", len(keys), len(results))
 		return errors.WithMessagef(err, "problem id: %s, ver: %s", p.Id, p.Ver)
 	}
 
@@ -284,7 +288,7 @@ func (m *Manager) HoldAndLock(ctx context.Context, id, version string) (*model.P
 	m.problems[key].locks++
 
 	sugar.Info("successfully prepared and locked this problem")
-	return nil, func() { m.unlock(m.problems[key].problem) }, nil
+	return m.problems[key].problem, func() { m.unlock(m.problems[key].problem) }, nil
 }
 
 func (m *Manager) unlock(p *model.Problem) {
