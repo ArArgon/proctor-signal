@@ -109,10 +109,12 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 	defer unlock()
 
 	// TODO: Compile source code.
-	err = w.judge.Compile(ctx, sub)
+	fileIDs, err := w.judge.Compile(ctx, p, sub)
+	defer w.judge.RemoveFiles(fileIDs)
 	if err != nil {
 		return internErr, err
 	}
+
 	// Compose the DAG.
 	dag := model.NewSubtaskGraph(p)
 
