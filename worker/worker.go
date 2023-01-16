@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -19,6 +20,7 @@ import (
 )
 
 type Worker struct {
+	wg         *sync.WaitGroup
 	judge      *judge.Manager
 	resManager *resource.Manager
 	backend    backend.BackendServiceClient
@@ -29,13 +31,15 @@ const backoffInterval = time.Millisecond * 200
 
 func (w *Worker) Start(ctx context.Context, logger *zap.Logger, concurrency int) {
 	for i := 1; i <= concurrency; i++ {
-		go w.spin(ctx, logger, i)
+		w.wg.Add(1)
+		go w.spin(ctx, logger.Named("worker_spin"), i)
 	}
 }
 
 func (w *Worker) spin(ctx context.Context, logger *zap.Logger, id int) {
-	sugar := logger.Sugar().With("worker_id", id).Named("worker_spin")
+	sugar := logger.Sugar().With("worker_id", id)
 	tick := time.NewTicker(time.Millisecond * 500)
+	defer w.wg.Done()
 	defer tick.Stop()
 	for {
 		select {
@@ -156,5 +160,9 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 
 	// TODO: Report.
 
-	return nil, nil
+	return &backend.CompleteJudgeTaskRequest{Result: result}, nil
+}
+
+func (w *Worker) Wait() {
+	w.wg.Wait()
 }

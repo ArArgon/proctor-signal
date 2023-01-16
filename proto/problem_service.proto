@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-import "model/model.proto";
+import "model.proto";
 
 option go_package = "proctor-signal/external/backend";
 
