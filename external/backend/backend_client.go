@@ -3,12 +3,17 @@ package backend
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
+	"proctor-signal/config"
 )
 
 type Client interface {
@@ -29,9 +34,27 @@ type client struct {
 }
 
 // NewBackendClient builds a backend.Client with given configurations.
-func NewBackendClient() (Client, error) {
-	// TODO(ArArgon)
-	return &client{}, nil
+// TODO: incorporate AuthClient.
+func NewBackendClient(conf *config.Config) (Client, error) {
+	// gRPC client.
+	grpcConn, err := grpc.Dial(
+		fmt.Sprintf("dns:%s:%d", conf.Backend.Addr, conf.Backend.GrpcPort),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to establish grpc connection")
+	}
+
+	apiURL := fmt.Sprint(
+		lo.Ternary(conf.Backend.HttpTLS, "https://", "http://"),
+		conf.Backend.Addr, ":", conf.Backend.HttpPort,
+	)
+
+	return &client{
+		BackendServiceClient: NewBackendServiceClient(grpcConn),
+		httpCli:              new(http.Client),
+		apiURL:               apiURL,
+	}, nil
 }
 
 func (c *client) GetResourceStream(

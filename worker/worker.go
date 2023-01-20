@@ -29,6 +29,17 @@ type Worker struct {
 const maxTimeout = time.Minute * 10
 const backoffInterval = time.Millisecond * 200
 
+func NewWorker(
+	judgeManager *judge.Manager, resManager *resource.Manager, backendCli backend.BackendServiceClient,
+) *Worker {
+	return &Worker{
+		wg:         new(sync.WaitGroup),
+		judge:      judgeManager,
+		resManager: resManager,
+		backend:    backendCli,
+	}
+}
+
 func (w *Worker) Start(ctx context.Context, logger *zap.Logger, concurrency int) {
 	for i := 1; i <= concurrency; i++ {
 		w.wg.Add(1)
@@ -38,7 +49,7 @@ func (w *Worker) Start(ctx context.Context, logger *zap.Logger, concurrency int)
 
 func (w *Worker) spin(ctx context.Context, logger *zap.Logger, id int) {
 	sugar := logger.Sugar().With("worker_id", id)
-	tick := time.NewTicker(time.Millisecond * 500)
+	tick := time.NewTicker(time.Millisecond * 1000)
 	defer w.wg.Done()
 	defer tick.Stop()
 	for {

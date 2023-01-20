@@ -18,13 +18,168 @@ import (
 // Requires gRPC-Go v1.32.0 or later.
 const _ = grpc.SupportPackageIsVersion7
 
+// AuthServiceClient is the client API for AuthService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type AuthServiceClient interface {
+	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error)
+	RenewToken(ctx context.Context, in *RenewTokenRequest, opts ...grpc.CallOption) (*RenewTokenResponse, error)
+	GracefulExit(ctx context.Context, in *GracefulExitRequest, opts ...grpc.CallOption) (*GracefulExitResponse, error)
+}
+
+type authServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewAuthServiceClient(cc grpc.ClientConnInterface) AuthServiceClient {
+	return &authServiceClient{cc}
+}
+
+func (c *authServiceClient) Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error) {
+	out := new(RegisterResponse)
+	err := c.cc.Invoke(ctx, "/signal.backend.AuthService/Register", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) RenewToken(ctx context.Context, in *RenewTokenRequest, opts ...grpc.CallOption) (*RenewTokenResponse, error) {
+	out := new(RenewTokenResponse)
+	err := c.cc.Invoke(ctx, "/signal.backend.AuthService/RenewToken", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authServiceClient) GracefulExit(ctx context.Context, in *GracefulExitRequest, opts ...grpc.CallOption) (*GracefulExitResponse, error) {
+	out := new(GracefulExitResponse)
+	err := c.cc.Invoke(ctx, "/signal.backend.AuthService/GracefulExit", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// AuthServiceServer is the server API for AuthService service.
+// All implementations must embed UnimplementedAuthServiceServer
+// for forward compatibility
+type AuthServiceServer interface {
+	Register(context.Context, *RegisterRequest) (*RegisterResponse, error)
+	RenewToken(context.Context, *RenewTokenRequest) (*RenewTokenResponse, error)
+	GracefulExit(context.Context, *GracefulExitRequest) (*GracefulExitResponse, error)
+	mustEmbedUnimplementedAuthServiceServer()
+}
+
+// UnimplementedAuthServiceServer must be embedded to have forward compatible implementations.
+type UnimplementedAuthServiceServer struct {
+}
+
+func (UnimplementedAuthServiceServer) Register(context.Context, *RegisterRequest) (*RegisterResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Register not implemented")
+}
+func (UnimplementedAuthServiceServer) RenewToken(context.Context, *RenewTokenRequest) (*RenewTokenResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RenewToken not implemented")
+}
+func (UnimplementedAuthServiceServer) GracefulExit(context.Context, *GracefulExitRequest) (*GracefulExitResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GracefulExit not implemented")
+}
+func (UnimplementedAuthServiceServer) mustEmbedUnimplementedAuthServiceServer() {}
+
+// UnsafeAuthServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to AuthServiceServer will
+// result in compilation errors.
+type UnsafeAuthServiceServer interface {
+	mustEmbedUnimplementedAuthServiceServer()
+}
+
+func RegisterAuthServiceServer(s grpc.ServiceRegistrar, srv AuthServiceServer) {
+	s.RegisterService(&AuthService_ServiceDesc, srv)
+}
+
+func _AuthService_Register_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).Register(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/signal.backend.AuthService/Register",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).Register(ctx, req.(*RegisterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_RenewToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RenewTokenRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).RenewToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/signal.backend.AuthService/RenewToken",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).RenewToken(ctx, req.(*RenewTokenRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthService_GracefulExit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GracefulExitRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthServiceServer).GracefulExit(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/signal.backend.AuthService/GracefulExit",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthServiceServer).GracefulExit(ctx, req.(*GracefulExitRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// AuthService_ServiceDesc is the grpc.ServiceDesc for AuthService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var AuthService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "signal.backend.AuthService",
+	HandlerType: (*AuthServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Register",
+			Handler:    _AuthService_Register_Handler,
+		},
+		{
+			MethodName: "RenewToken",
+			Handler:    _AuthService_RenewToken_Handler,
+		},
+		{
+			MethodName: "GracefulExit",
+			Handler:    _AuthService_GracefulExit_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "backend.proto",
+}
+
 // BackendServiceClient is the client API for BackendService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type BackendServiceClient interface {
-	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error)
-	RenewToken(ctx context.Context, in *RenewTokenRequest, opts ...grpc.CallOption) (*RenewTokenResponse, error)
-	GracefulExit(ctx context.Context, in *GracefulExitRequest, opts ...grpc.CallOption) (*GracefulExitResponse, error)
 	GetProblem(ctx context.Context, in *GetProblemRequest, opts ...grpc.CallOption) (*GetProblemResponse, error)
 	FetchJudgeTask(ctx context.Context, in *FetchJudgeTaskRequest, opts ...grpc.CallOption) (*FetchJudgeTaskResponse, error)
 	CompleteJudgeTask(ctx context.Context, in *CompleteJudgeTaskRequest, opts ...grpc.CallOption) (*CompleteJudgeTaskResponse, error)
@@ -40,33 +195,6 @@ type backendServiceClient struct {
 
 func NewBackendServiceClient(cc grpc.ClientConnInterface) BackendServiceClient {
 	return &backendServiceClient{cc}
-}
-
-func (c *backendServiceClient) Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error) {
-	out := new(RegisterResponse)
-	err := c.cc.Invoke(ctx, "/signal.backend.BackendService/Register", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendServiceClient) RenewToken(ctx context.Context, in *RenewTokenRequest, opts ...grpc.CallOption) (*RenewTokenResponse, error) {
-	out := new(RenewTokenResponse)
-	err := c.cc.Invoke(ctx, "/signal.backend.BackendService/RenewToken", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendServiceClient) GracefulExit(ctx context.Context, in *GracefulExitRequest, opts ...grpc.CallOption) (*GracefulExitResponse, error) {
-	out := new(GracefulExitResponse)
-	err := c.cc.Invoke(ctx, "/signal.backend.BackendService/GracefulExit", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 func (c *backendServiceClient) GetProblem(ctx context.Context, in *GetProblemRequest, opts ...grpc.CallOption) (*GetProblemResponse, error) {
@@ -136,9 +264,6 @@ func (c *backendServiceClient) GetResourceBatch(ctx context.Context, in *GetReso
 // All implementations must embed UnimplementedBackendServiceServer
 // for forward compatibility
 type BackendServiceServer interface {
-	Register(context.Context, *RegisterRequest) (*RegisterResponse, error)
-	RenewToken(context.Context, *RenewTokenRequest) (*RenewTokenResponse, error)
-	GracefulExit(context.Context, *GracefulExitRequest) (*GracefulExitResponse, error)
 	GetProblem(context.Context, *GetProblemRequest) (*GetProblemResponse, error)
 	FetchJudgeTask(context.Context, *FetchJudgeTaskRequest) (*FetchJudgeTaskResponse, error)
 	CompleteJudgeTask(context.Context, *CompleteJudgeTaskRequest) (*CompleteJudgeTaskResponse, error)
@@ -153,15 +278,6 @@ type BackendServiceServer interface {
 type UnimplementedBackendServiceServer struct {
 }
 
-func (UnimplementedBackendServiceServer) Register(context.Context, *RegisterRequest) (*RegisterResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Register not implemented")
-}
-func (UnimplementedBackendServiceServer) RenewToken(context.Context, *RenewTokenRequest) (*RenewTokenResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method RenewToken not implemented")
-}
-func (UnimplementedBackendServiceServer) GracefulExit(context.Context, *GracefulExitRequest) (*GracefulExitResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GracefulExit not implemented")
-}
 func (UnimplementedBackendServiceServer) GetProblem(context.Context, *GetProblemRequest) (*GetProblemResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetProblem not implemented")
 }
@@ -194,60 +310,6 @@ type UnsafeBackendServiceServer interface {
 
 func RegisterBackendServiceServer(s grpc.ServiceRegistrar, srv BackendServiceServer) {
 	s.RegisterService(&BackendService_ServiceDesc, srv)
-}
-
-func _BackendService_Register_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RegisterRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServiceServer).Register(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/signal.backend.BackendService/Register",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServiceServer).Register(ctx, req.(*RegisterRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _BackendService_RenewToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RenewTokenRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServiceServer).RenewToken(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/signal.backend.BackendService/RenewToken",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServiceServer).RenewToken(ctx, req.(*RenewTokenRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _BackendService_GracefulExit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GracefulExitRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServiceServer).GracefulExit(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/signal.backend.BackendService/GracefulExit",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServiceServer).GracefulExit(ctx, req.(*GracefulExitRequest))
-	}
-	return interceptor(ctx, in, info, handler)
 }
 
 func _BackendService_GetProblem_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -383,18 +445,6 @@ var BackendService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "signal.backend.BackendService",
 	HandlerType: (*BackendServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "Register",
-			Handler:    _BackendService_Register_Handler,
-		},
-		{
-			MethodName: "RenewToken",
-			Handler:    _BackendService_RenewToken_Handler,
-		},
-		{
-			MethodName: "GracefulExit",
-			Handler:    _BackendService_GracefulExit_Handler,
-		},
 		{
 			MethodName: "GetProblem",
 			Handler:    _BackendService_GetProblem_Handler,

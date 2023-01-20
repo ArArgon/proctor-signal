@@ -10,8 +10,13 @@ import (
 	"runtime/debug"
 	"time"
 
+	"github.com/samber/lo"
+
+	"proctor-signal/config"
+	"proctor-signal/external/backend"
 	"proctor-signal/judge"
 	"proctor-signal/resource"
+	judgeworker "proctor-signal/worker"
 
 	judgeconfig "github.com/criyle/go-judge/cmd/executorserver/config"
 	"github.com/criyle/go-judge/env"
@@ -30,23 +35,25 @@ type stopFunc func(ctx context.Context) error
 type initFunc func() (start func(), cleanUp stopFunc)
 
 func main() {
-	conf := loadConf()
-	initLogger(conf)
+	conf := lo.Must(config.LoadConf("conf/signal.toml"))
+	initLogger(conf.GoJudgeConf)
 	sugar := logger.Sugar()
+	backendCli := lo.Must(backend.NewBackendClient(conf))
 
 	defer func() { _ = logger.Sync() }()
 
 	sugar.Infof("conf: %+v", conf)
 
 	// Init environment pool
-	fs, fsCleanUp := newFileStore(conf)
-	b := newEnvBuilder(conf)
+	judgeConf := conf.GoJudgeConf
+	fs, fsCleanUp := newFileStore(judgeConf)
+	b := newEnvBuilder(judgeConf)
 	envPool := newEnvPool(b)
-	prefork(envPool, conf.PreFork)
-	work := newWorker(conf, envPool, fs)
+	prefork(envPool, judgeConf.PreFork)
+	work := newWorker(judgeConf, envPool, fs)
 	work.Start()
 	logger.Sugar().Infof("Started worker, concurrency=%d, workdir=%s, timeLimitCheckInterval=%v",
-		conf.Parallelism, conf.Dir, conf.TimeLimitCheckerInterval)
+		judgeConf.Parallelism, judgeConf.Dir, judgeConf.TimeLimitCheckerInterval)
 
 	servers := []initFunc{
 		cleanUpWorker(work),
@@ -72,10 +79,14 @@ func main() {
 	}
 
 	// background force GC worker
-	newForceGCWorker(conf)
+	newForceGCWorker(judgeConf)
 
-	manager := judge.NewJudgeManager(work)
-	sugar.Infof(manager.ExecuteCommand(context.Background(), "echo hello world!"))
+	resManager := resource.NewResourceManager(logger, backendCli, fs.(*resource.FileStore))
+	judgeManager := judge.NewJudgeManager(work)
+	w := judgeworker.NewWorker(judgeManager, resManager, backendCli)
+	ctx, cancel := context.WithCancel(context.Background())
+	//sugar.Infof(judgeManager.ExecuteCommand(context.Background(), "echo hello world!"))
+	w.Start(ctx, logger, 2)
 
 	// Graceful shutdown...
 	signal.Notify(sig, os.Interrupt)
@@ -83,8 +94,9 @@ func main() {
 	signal.Reset(os.Interrupt)
 
 	sugar.Info("Shutting Down...")
+	cancel()
 
-	ctx, cancel := context.WithTimeout(context.TODO(), time.Second*3)
+	ctx, cancel = context.WithTimeout(context.TODO(), time.Second*3)
 	defer cancel()
 
 	var eg errgroup.Group

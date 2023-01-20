@@ -3,6 +3,7 @@ syntax = "proto3";
 import "model.proto";
 
 option go_package = "proctor-signal/external/backend";
+option java_package = "com.hjj.backend.judge";
 
 package signal.backend;
 
