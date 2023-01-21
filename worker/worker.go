@@ -13,7 +13,6 @@ import (
 	"proctor-signal/resource"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/criyle/go-judge/envexec"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.uber.org/multierr"
@@ -135,26 +134,10 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 		return internErr, err
 	}
 	if compileRes.Status >= 4 {
+		sugar.With("err", compileRes.Status.String()).Error("failed to finish compile")
 		compileErr.Result.CompilerOutput = lo.ToPtr(compileRes.Output)
 		compileErr.Result.Remark = lo.ToPtr(compileRes.Error)
-
-		switch compileRes.Status {
-		case envexec.StatusMemoryLimitExceeded:
-			compileErr.Result.Conclusion = model.Conclusion_MemoryLimitExceeded
-		case envexec.StatusTimeLimitExceeded:
-			compileErr.Result.Conclusion = model.Conclusion_MemoryLimitExceeded
-		case envexec.StatusOutputLimitExceeded:
-			compileErr.Result.Conclusion = model.Conclusion_OutputLimitExceeded
-		case envexec.StatusFileError:
-			compileErr.Result.Conclusion = model.Conclusion_FileError
-		case envexec.StatusNonzeroExitStatus:
-			compileErr.Result.Conclusion = model.Conclusion_NonZeroExitStatus
-		case envexec.StatusSignalled:
-			compileErr.Result.Conclusion = model.Conclusion_Signalled
-		case envexec.StatusDangerousSyscall:
-			compileErr.Result.Conclusion = model.Conclusion_DangerousSyscall
-		}
-
+		compileErr.Result.Conclusion = model.ConvertStatusToConclusion(compileRes.Status)
 		return compileErr, nil
 	}
 
