@@ -5,15 +5,18 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
 	"proctor-signal/model"
 	"proctor-signal/resource"
 
+	"github.com/criyle/go-judge/envexec"
 	"github.com/criyle/go-judge/worker"
 	"github.com/criyle/go-sandbox/runner"
 	"github.com/samber/lo"
+	"gopkg.in/yaml.v3"
 )
 
 func NewJudgeManager(worker worker.Worker) *Manager {
@@ -31,6 +34,34 @@ type Manager struct {
 type CompileOption struct {
 }
 
+type CompileRes struct {
+	Status          envexec.Status
+	ExitStatus      int
+	Error           string
+	Output          string
+	ArtifactFileIDs map[string]string
+}
+
+var languageConfig map[string]struct {
+	SourceName   string            `yaml:"SourceName"`
+	ArtifactName string            `yaml:"ArtifactName"`
+	CompileCmd   string            `yaml:"CompileCmd"`
+	ExecuteCmd   string            `yaml:"ExecuteCmd"`
+	Options      map[string]string `yaml:"Options"`
+}
+
+func init() {
+	f, err := os.Open("language.yaml")
+	defer f.Close()
+	if err != nil {
+		fmt.Printf("err: %v\n", err)
+	}
+	err = yaml.NewDecoder(f).Decode(&languageConfig)
+	if err != nil {
+		fmt.Printf("err: %v\n", err)
+	}
+}
+
 func (m *Manager) RemoveFiles(fileIDs map[string]string) {
 	for _, v := range fileIDs {
 		m.fs.Remove(v)
@@ -39,138 +70,60 @@ func (m *Manager) RemoveFiles(fileIDs map[string]string) {
 
 // Compile compiles given program with specified parameters, fetches the artifact from container and stores
 // it into local resource manager.
-func (m *Manager) Compile(ctx context.Context, p *model.Problem, sub *model.Submission) (map[string]string, error) {
-	var res worker.Response
-	switch sub.Language {
-	case "c":
-		res = <-m.worker.Execute(ctx, &worker.Request{
-			Cmd: []worker.Cmd{{
-				Env:         []string{"PATH=/usr/bin:/bin"},
-				Args:        append([]string{"gcc", "main.c", "-o", "main"}, strings.Split(sub.CompilerOption, " ")...),
-				CPULimit:    time.Duration(p.DefaultTimeLimit),
-				MemoryLimit: runner.Size(p.DefaultSpaceLimit),
-				ProcLimit:   50,
-				Files: []worker.CmdFile{
-					&worker.MemoryFile{Content: []byte("")},
-					&worker.Collector{Name: "stdout", Max: 10240},
-					&worker.Collector{Name: "stderr", Max: 10240},
-				},
-				CopyIn: map[string]worker.CmdFile{
-					"main.c": &worker.MemoryFile{Content: sub.SourceCode},
-				},
-				CopyOutCached: []worker.CmdCopyOutFile{
-					{"main", true},
-				},
-				CopyOut: []worker.CmdCopyOutFile{
-					{"stderr", true},
-				},
-			}},
-		})
-		// case "cpp":
-		// 	res = <-m.worker.Execute(ctx, &worker.Request{
-		// 		Cmd: []worker.Cmd{{
-		// 			Env:         []string{"PATH=/usr/bin:/bin"},
-		// 			Args:        []string{"g++", "main.cpp", "-o", "main"},
-		// 			CPULimit:    time.Duration(p.DefaultTimeLimit),
-		// 			MemoryLimit: runner.Size(p.DefaultSpaceLimit),
-		// 			ProcLimit:   50,
-		// 			Files: []worker.CmdFile{
-		// 				&worker.MemoryFile{Content: []byte("")},
-		// 				&worker.Collector{Name: "stdout", Max: 10240},
-		// 				&worker.Collector{Name: "stderr", Max: 10240},
-		// 			},
-		// 			CopyIn: map[string]worker.CmdFile{
-		// 				"main.cpp": &worker.MemoryFile{Content: sub.SourceCode},
-		// 			},
-		// 			CopyOut: []worker.CmdCopyOutFile{
-		// 				{"stderr", true},
-		// 			},
-		// 		}},
-		// 	})
-		// 	var id string
-		// 	id, err := m.fs.Add("main.cpp", "")
-		// 	if err != nil {
-		// 		return err
-		// 	}
-		// 	cleanList = append(cleanList, id)
-
-		// 	id, err = m.fs.Add("main", "")
-		// 	if err != nil {
-		// 		return err
-		// 	}
-		// 	cleanList = append(cleanList, id)
-		// case "java":
-		// 	res = <-m.worker.Execute(ctx, &worker.Request{
-		// 		Cmd: []worker.Cmd{{
-		// 			Env:         []string{"PATH=/usr/bin:/bin"},
-		// 			Args:        []string{"javac", "main.java"},
-		// 			CPULimit:    time.Duration(p.DefaultTimeLimit),
-		// 			MemoryLimit: runner.Size(p.DefaultSpaceLimit),
-		// 			ProcLimit:   50,
-		// 			Files: []worker.CmdFile{
-		// 				&worker.MemoryFile{Content: []byte("")},
-		// 				&worker.Collector{Name: "stdout", Max: 10240},
-		// 				&worker.Collector{Name: "stderr", Max: 10240},
-		// 			},
-		// 			CopyIn: map[string]worker.CmdFile{
-		// 				"main.java": &worker.MemoryFile{Content: sub.SourceCode},
-		// 			},
-		// 			CopyOut: []worker.CmdCopyOutFile{
-		// 				{"stderr", true},
-		// 			},
-		// 		}},
-		// 	})
-		// 	var id string
-		// 	id, err := m.fs.Add("main.java", "")
-		// 	if err != nil {
-		// 		return err
-		// 	}
-		// 	cleanList = append(cleanList, id)
-
-		// 	id, err = m.fs.Add("main.class", "")
-		// 	if err != nil {
-		// 		return err
-		// 	}
-		// 	cleanList = append(cleanList, id)
-		// case "golang":
-		// 	res = <-m.worker.Execute(ctx, &worker.Request{
-		// 		Cmd: []worker.Cmd{{
-		// 			Env:         []string{"PATH=/usr/bin:/bin"},
-		// 			Args:        []string{"go", "build", "main.go"},
-		// 			CPULimit:    time.Duration(p.DefaultTimeLimit),
-		// 			MemoryLimit: runner.Size(p.DefaultSpaceLimit),
-		// 			ProcLimit:   50,
-		// 			Files: []worker.CmdFile{
-		// 				&worker.MemoryFile{Content: []byte("")},
-		// 				&worker.Collector{Name: "stdout", Max: 10240},
-		// 				&worker.Collector{Name: "stderr", Max: 10240},
-		// 			},
-		// 			CopyIn: map[string]worker.CmdFile{
-		// 				"main.go": &worker.MemoryFile{Content: sub.SourceCode},
-		// 			},
-		// 			CopyOut: []worker.CmdCopyOutFile{
-		// 				{"stderr", true},
-		// 			},
-		// 		}},
-		// 	})
-		// 	var id string
-		// 	id, err := m.fs.Add("main.go", "")
-		// 	if err != nil {
-		// 		return err
-		// 	}
-		// 	cleanList = append(cleanList, id)
-
-		// 	id, err = m.fs.Add("main", "")
-		// 	if err != nil {
-		// 		return err
-		// 	}
-		// 	cleanList = append(cleanList, id)
+func (m *Manager) Compile(ctx context.Context, p *model.Problem, sub *model.Submission) (*CompileRes, error) {
+	// TODO: compile options
+	compileConf, ok := languageConfig[sub.Language]
+	if !ok {
+		return nil, fmt.Errorf("compile config for %s not found", sub.Language)
 	}
 
-	if stderr, err := io.ReadAll(res.Results[0].Files["stderr"]); err != io.EOF {
-		return res.Results[0].FileIDs, errors.New(string(stderr))
+	res := <-m.worker.Execute(ctx, &worker.Request{
+		Cmd: []worker.Cmd{{
+			Env:         []string{"PATH=/usr/bin:/bin", "SourceName=" + compileConf.SourceName, "ArtifactName=" + compileConf.ArtifactName},
+			Args:        strings.Split(compileConf.CompileCmd, " "),
+			CPULimit:    time.Duration(p.DefaultTimeLimit),
+			MemoryLimit: runner.Size(p.DefaultSpaceLimit),
+			ProcLimit:   50,
+			Files: []worker.CmdFile{
+				&worker.MemoryFile{Content: []byte("")},
+				&worker.Collector{Name: "stdout", Max: 10240},
+				&worker.Collector{Name: "stderr", Max: 10240},
+			},
+			CopyIn: map[string]worker.CmdFile{
+				compileConf.SourceName: &worker.MemoryFile{Content: sub.SourceCode},
+			},
+			CopyOutCached: []worker.CmdCopyOutFile{
+				{Name: compileConf.ArtifactName, Optional: true},
+			},
+			CopyOut: []worker.CmdCopyOutFile{
+				{Name: "stdout", Optional: true},
+				{Name: "stderr", Optional: true},
+			},
+		}},
+	})
+
+	compileRes := &CompileRes{Status: res.Results[0].Status, ExitStatus: res.Results[0].ExitStatus, Error: res.Results[0].Error, ArtifactFileIDs: res.Results[0].FileIDs}
+	if res.Error != nil {
+		return compileRes, res.Error
 	}
-	return res.Results[0].FileIDs, nil
+
+	// read compile output
+	var compileOutput []byte
+	var err error
+	if res.Results[0].ExitStatus == 0 {
+		compileOutput, err = io.ReadAll(res.Results[0].Files["stdout"])
+		if err != nil && err != io.EOF {
+			return compileRes, errors.New("failed to read compile stdout")
+		}
+	} else {
+		compileOutput, err = io.ReadAll(res.Results[0].Files["stderr"])
+		if err != nil && err != io.EOF {
+			return compileRes, errors.New("failed to read compile stderr")
+		}
+	}
+	compileRes.Output = string(compileOutput)
+
+	return compileRes, nil
 }
 
 func (m *Manager) ExecuteCommand(ctx context.Context, cmd string) string {

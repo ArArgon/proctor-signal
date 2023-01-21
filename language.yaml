@@ -1,0 +1,17 @@
+cpp:
+    SourceName: source.cpp
+    ArtifactName: a.out
+    CompileCmd: "/usr/bin/g++ ${SourceName} -o ${ArtifactName}"
+    ExecuteCmd: "${ArtifactName}"
+    Options:
+        o2: "-O2"
+        cpp14: "--std=c++14"
+
+java:
+    SourceName: Solution.java
+    ArtifactName: Solution.class
+    CompileCmd: "/usr/bin/java ${SourceName}"
+    ExecuteCmd: "/usr/bin/java -jar ${ArtifactName}"
+python:
+    SourceName: source.py
+    ExecuteCmd: "/usr/bin/python3 ${SourceName}"
