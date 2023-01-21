@@ -207,3 +207,15 @@ func (mr *MockClientMockRecorder) PutResourceStream(arg0, arg1, arg2, arg3 inter
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutResourceStream", reflect.TypeOf((*MockClient)(nil).PutResourceStream), arg0, arg1, arg2, arg3)
 }
+
+// ReportExit mocks base method.
+func (m *MockClient) ReportExit(arg0 context.Context, arg1 string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ReportExit", arg0, arg1)
+}
+
+// ReportExit indicates an expected call of ReportExit.
+func (mr *MockClientMockRecorder) ReportExit(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReportExit", reflect.TypeOf((*MockClient)(nil).ReportExit), arg0, arg1)
+}

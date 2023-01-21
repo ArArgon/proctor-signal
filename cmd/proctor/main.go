@@ -38,7 +38,9 @@ func main() {
 	conf := lo.Must(config.LoadConf("conf/signal.toml"))
 	initLogger(conf.GoJudgeConf)
 	sugar := logger.Sugar()
-	backendCli := lo.Must(backend.NewBackendClient(conf))
+	ctx, cancel := context.WithCancel(context.Background())
+
+	backendCli := lo.Must(backend.NewBackendClient(ctx, logger, conf))
 
 	defer func() { _ = logger.Sync() }()
 
@@ -84,7 +86,6 @@ func main() {
 	resManager := resource.NewResourceManager(logger, backendCli, fs.(*resource.FileStore))
 	judgeManager := judge.NewJudgeManager(work)
 	w := judgeworker.NewWorker(judgeManager, resManager, backendCli)
-	ctx, cancel := context.WithCancel(context.Background())
 	//sugar.Infof(judgeManager.ExecuteCommand(context.Background(), "echo hello world!"))
 	w.Start(ctx, logger, 2)
 
@@ -99,6 +100,7 @@ func main() {
 	ctx, cancel = context.WithTimeout(context.TODO(), time.Second*3)
 	defer cancel()
 
+	backendCli.ReportExit(ctx, "exiting")
 	var eg errgroup.Group
 	for _, s := range stops {
 		s := s

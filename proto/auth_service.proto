@@ -33,6 +33,7 @@ message RenewTokenResponse {
 
 message GracefulExitRequest {
   string reason = 1;
+  string instance_id = 2;
 }
 
 message GracefulExitResponse {
