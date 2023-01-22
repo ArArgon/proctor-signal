@@ -50,8 +50,23 @@ var languageConfig map[string]struct {
 	Options      map[string]string `yaml:"Options"`
 }
 
-func init() {
-	f, err := os.Open("../language.yaml")
+// func init() {
+// 	f, err := os.Open("../language.yaml")
+// 	defer func() { _ = f.Close() }()
+
+// 	if err != nil {
+// 		fmt.Printf("err: %v\n", err)
+// 		panic("fail to open language config")
+// 	}
+// 	err = yaml.NewDecoder(f).Decode(&languageConfig)
+// 	if err != nil {
+// 		fmt.Printf("err: %v\n", err)
+// 		panic("fail to decode language config")
+// 	}
+// }
+
+func LoadLanguageConfig(configPath string) {
+	f, err := os.Open(configPath)
 	defer func() { _ = f.Close() }()
 
 	if err != nil {

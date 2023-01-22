@@ -23,14 +23,15 @@ var logger *zap.Logger
 func main() {
 	conf := loadConf()
 	initLogger(conf)
-	gojudge.Init(logger)
 	sugar := logger.Sugar()
-
 	defer func() { _ = logger.Sync() }()
-
 	sugar.Infof("conf: %+v", conf)
 
+	// Init judge
+	judge.LoadLanguageConfig("language.yaml")
+
 	// Init gojudge
+	gojudge.Init(logger)
 	fs, fsCleanUp := newFileStore(conf)
 	b := gojudge.NewEnvBuilder(conf)
 	envPool := gojudge.NewEnvPool(b, false)
