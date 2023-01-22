@@ -26,6 +26,7 @@ func TestExecuteCommand(t *testing.T) {
 	config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 	config.Level.SetLevel(zap.InfoLevel)
 	logger := lo.Must(config.Build())
+	gojudge.Init(logger)
 
 	// Prepare tmp dir.
 	loc, err := os.MkdirTemp(os.TempDir(), "signal")
