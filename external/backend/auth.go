@@ -40,7 +40,9 @@ type authManager struct {
 	noExpiration bool
 }
 
-func newAuthManager(ctx context.Context, logger *zap.Logger, conn *grpc.ClientConn, conf *config.Config) (*authManager, error) {
+func newAuthManager(
+	ctx context.Context, logger *zap.Logger, conn *grpc.ClientConn, conf *config.Config,
+) (*authManager, error) {
 	m := &authManager{
 		cli:     NewAuthServiceClient(conn),
 		logger:  logger,

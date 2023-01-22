@@ -39,7 +39,7 @@ type client struct {
 	BackendServiceClient
 	auth    *authManager
 	httpCli *http.Client
-	apiURL  string
+	baseURL string
 }
 
 // NewBackendClient builds a backend.Client with given configurations.
@@ -72,14 +72,20 @@ func NewBackendClient(ctx context.Context, logger *zap.Logger, conf *config.Conf
 		return nil, errors.WithMessage(err, "failed to establish backend grpc connection")
 	}
 
-	apiURL := fmt.Sprint(
-		lo.Ternary(conf.Backend.HttpTLS, "https://", "http://"),
-		conf.Backend.Addr, ":", conf.Backend.HttpPort,
+	baseURL, err := url.JoinPath(
+		fmt.Sprintf("%s://%s:%d",
+			lo.Ternary(conf.Backend.HttpTLS, "https", "http"),
+			conf.Backend.Addr, conf.Backend.HttpPort,
+		),
+		conf.Backend.HttpPrefix,
 	)
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to compose api url")
+	}
 	return &client{
 		BackendServiceClient: NewBackendServiceClient(backendConn),
 		auth:                 auth,
-		apiURL:               apiURL,
+		baseURL:              baseURL,
 		httpCli:              &http.Client{Transport: auth},
 	}, nil
 }
@@ -88,7 +94,7 @@ func (c *client) GetResourceStream(
 	ctx context.Context, resourceType ResourceType, key string,
 ) (int64, io.ReadCloser, error) {
 	// URL: /resource/:type/:key
-	path, err := url.JoinPath(c.apiURL, "/resource", resourceType.String(), key)
+	path, err := url.JoinPath(c.baseURL, "/resource", resourceType.String(), key)
 	if err != nil {
 		return 0, nil, errors.WithMessage(err, "invalid resource key")
 	}
@@ -126,7 +132,7 @@ type putResourceStreamResponse struct {
 func (c *client) PutResourceStream(
 	ctx context.Context, resourceType ResourceType, size int64, body io.ReadCloser,
 ) (string, error) {
-	path, err := url.JoinPath(c.apiURL, "/resource", resourceType.String())
+	path, err := url.JoinPath(c.baseURL, "/resource", resourceType.String())
 	if err != nil {
 		return "", errors.WithMessage(err, "invalid resource key")
 	}

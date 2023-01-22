@@ -17,6 +17,7 @@ type Config struct {
 		Addr         string `default:"localhost" env:"BACKEND_ADDR"`
 		GrpcPort     uint   `default:"9003" env:"BACKEND_GRPC_PORT"`
 		HttpPort     uint   `default:"8080" env:"BACKEND_HTTP_PORT"`
+		HttpPrefix   string `default:"/" env:"BACKEND_HTTP_PREFIX"`
 		HttpTLS      bool   `default:"false" env:"BACKEND_HTTP_TLS"`
 		InsecureGrpc bool   `default:"false" env:"BACKEND_INSECURE_GRPC"`
 		InsecureJwt  bool   `default:"false" env:"BACKEND_INSECURE_JWT"`
