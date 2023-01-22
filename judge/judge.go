@@ -52,13 +52,18 @@ var languageConfig map[string]struct {
 
 func init() {
 	f, err := os.Open("language.yaml")
-	defer f.Close()
+	defer func() {
+		_ = f.Close()
+	}()
+
 	if err != nil {
 		fmt.Printf("err: %v\n", err)
+		panic("fail to open language config: ")
 	}
 	err = yaml.NewDecoder(f).Decode(&languageConfig)
 	if err != nil {
 		fmt.Printf("err: %v\n", err)
+		panic("fail to decode language config: ")
 	}
 }
 
@@ -68,8 +73,6 @@ func (m *Manager) RemoveFiles(fileIDs map[string]string) {
 	}
 }
 
-// Compile compiles given program with specified parameters, fetches the artifact from container and stores
-// it into local resource manager.
 func (m *Manager) Compile(ctx context.Context, p *model.Problem, sub *model.Submission) (*CompileRes, error) {
 	// TODO: compile options
 	compileConf, ok := languageConfig[sub.Language]
