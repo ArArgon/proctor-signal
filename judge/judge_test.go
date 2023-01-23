@@ -54,6 +54,9 @@ func TestMain(m *testing.M) {
 	envPool := gojudge.NewEnvPool(b, false)
 	gojudge.Prefork(envPool, conf.PreFork)
 	worker := gojudge.NewWorker(conf, envPool, fs)
+
+	// init judge
+	judge.LoadLanguageConfig("language.yaml")
 	judgeManger = judge.NewJudgeManager(worker)
 
 	os.Exit(m.Run())
