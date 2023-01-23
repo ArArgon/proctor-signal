@@ -56,7 +56,7 @@ func TestMain(m *testing.M) {
 	worker := gojudge.NewWorker(conf, envPool, fs)
 
 	// init judge
-	judge.LoadLanguageConfig("language.yaml")
+	judge.LoadLanguageConfig("../language.yaml")
 	judgeManger = judge.NewJudgeManager(worker)
 
 	os.Exit(m.Run())
