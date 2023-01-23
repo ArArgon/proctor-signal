@@ -42,6 +42,13 @@ type CompileRes struct {
 	ArtifactFileIDs map[string]string
 }
 
+type ExecuteRes struct {
+	Status     envexec.Status
+	ExitStatus int
+	Error      string
+	Output     string
+}
+
 var languageConfig map[string]struct {
 	SourceName   string            `yaml:"SourceName"`
 	ArtifactName string            `yaml:"ArtifactName"`
@@ -145,6 +152,58 @@ func (m *Manager) Compile(ctx context.Context, p *model.Problem, sub *model.Subm
 	compileRes.Output = string(compileOutput)
 
 	return compileRes, nil
+}
+
+// ExecuteFile execute a runnable file.
+func (m *Manager) ExecuteFile(ctx context.Context, filename, fileID string, p *model.Problem) (*ExecuteRes, error) {
+	res := <-m.worker.Execute(ctx, &worker.Request{
+		Cmd: []worker.Cmd{{
+			Env:         []string{"PATH=/usr/bin:/bin"},
+			Args:        []string{filename},
+			CPULimit:    time.Duration(p.DefaultTimeLimit),
+			MemoryLimit: runner.Size(p.DefaultSpaceLimit),
+			ProcLimit:   50,
+			Files: []worker.CmdFile{
+				&worker.MemoryFile{Content: []byte("")},
+				&worker.Collector{Name: "stdout", Max: 10240},
+				&worker.Collector{Name: "stderr", Max: 10240},
+			},
+			CopyIn: map[string]worker.CmdFile{
+				filename: &worker.CachedFile{FileID: fileID},
+			},
+			CopyOut: []worker.CmdCopyOutFile{
+				{Name: "stdout", Optional: true},
+				{Name: "stderr", Optional: true},
+			},
+		}},
+	})
+
+	executeRes := &ExecuteRes{
+		Status:     res.Results[0].Status,
+		ExitStatus: res.Results[0].ExitStatus,
+		Error:      res.Results[0].Error,
+	}
+	if res.Error != nil {
+		return executeRes, res.Error
+	}
+
+	// read execute output
+	var executeOutput []byte
+	var err error
+	if res.Results[0].ExitStatus == 0 {
+		executeOutput, err = io.ReadAll(res.Results[0].Files["stdout"])
+		if err != nil && err != io.EOF {
+			return executeRes, errors.New("failed to read execute stdout")
+		}
+	} else {
+		executeOutput, err = io.ReadAll(res.Results[0].Files["stderr"])
+		if err != nil && err != io.EOF {
+			return executeRes, errors.New("failed to read execute stderr")
+		}
+	}
+	executeRes.Output = string(executeOutput)
+
+	return executeRes, nil
 }
 
 func (m *Manager) ExecuteCommand(ctx context.Context, cmd string) string {
