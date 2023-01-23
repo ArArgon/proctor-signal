@@ -6,14 +6,17 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 
 	"go.uber.org/zap/zapcore"
 
 	"proctor-signal/external/gojudge"
 	"proctor-signal/judge"
+	"proctor-signal/model"
 	"proctor-signal/resource"
 
 	judgeconfig "github.com/criyle/go-judge/cmd/executorserver/config"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/criyle/go-sandbox/container"
 	"github.com/samber/lo"
@@ -56,8 +59,17 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestExecuteCommand(t *testing.T) {
-	t.Log(judgeManger.ExecuteCommand(context.Background(), "echo 114514"))
+// func TestExecuteCommand(t *testing.T) {
+// 	t.Log(judgeManger.ExecuteCommand(context.Background(), "echo 114514"))
+// }
+
+func TestCompile(t *testing.T) {
+	p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
+	codes, err := os.ReadFile("tests/source.c")
+	assert.NoError(t, err)
+	sub := &model.Submission{Language: "c", SourceCode: codes}
+
+	judgeManger.Compile(context.Background(), p, sub)
 }
 
 func loadConf() *judgeconfig.Config {
