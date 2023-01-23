@@ -118,7 +118,12 @@ func (m *Manager) Compile(ctx context.Context, p *model.Problem, sub *model.Subm
 		}},
 	})
 
-	compileRes := &CompileRes{Status: res.Results[0].Status, ExitStatus: res.Results[0].ExitStatus, Error: res.Results[0].Error, ArtifactFileIDs: res.Results[0].FileIDs}
+	compileRes := &CompileRes{
+		Status:          res.Results[0].Status,
+		ExitStatus:      res.Results[0].ExitStatus,
+		Error:           res.Results[0].Error,
+		ArtifactFileIDs: res.Results[0].FileIDs,
+	}
 	if res.Error != nil {
 		return compileRes, res.Error
 	}
