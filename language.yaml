@@ -1,3 +1,9 @@
+c:
+    SourceName: source.c
+    ArtifactName: a.out
+    CompileCmd: "/usr/bin/gcc ${SourceName} -o ${ArtifactName}"
+    ExecuteCmd: "${ArtifactName}"
+
 cpp:
     SourceName: source.cpp
     ArtifactName: a.out
