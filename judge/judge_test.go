@@ -69,7 +69,8 @@ func TestCompile(t *testing.T) {
 	assert.NoError(t, err)
 	sub := &model.Submission{Language: "c", SourceCode: codes}
 
-	judgeManger.Compile(context.Background(), p, sub)
+	_, err = judgeManger.Compile(context.Background(), p, sub)
+	assert.NoError(t, err)
 }
 
 func loadConf() *judgeconfig.Config {
