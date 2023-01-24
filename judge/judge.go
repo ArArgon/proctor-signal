@@ -148,7 +148,7 @@ func (m *Manager) Compile(ctx context.Context, p *model.Problem, sub *model.Subm
 }
 
 // ExecuteFile execute a runnable file with stdin.
-func (m *Manager) ExecuteFile(ctx context.Context, filename, fileID, stdin string, p *model.Problem) (*ExecuteRes, error) {
+func (m *Manager) ExecuteFile(ctx context.Context, filename, fileID string, stdin []byte, p *model.Problem) (*ExecuteRes, error) {
 	res := <-m.worker.Execute(ctx, &worker.Request{
 		Cmd: []worker.Cmd{{
 			Env:         []string{"PATH=/usr/bin:/bin"},
