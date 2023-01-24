@@ -200,29 +200,34 @@ func (m *Manager) ExecuteFile(ctx context.Context, filename, fileID string, p *m
 		_, _ = f.Seek(0, 0)
 	}
 
-	var executeOutput []byte
-	var err error
-	if res.Results[0].ExitStatus == 0 {
-		// _, err = res.Results[0].Files["stdout"].Seek(0, 0)
-		// if err != nil {
-		// 	return executeRes, errors.New("failed to reseek execute stdout: " + err.Error())
-		// }
-		executeOutput, err = io.ReadAll(res.Results[0].Files["stdout"])
-		if err != nil && err != io.EOF {
-			return executeRes, errors.New("failed to read execute stdout: " + err.Error())
-		}
-	} else {
-		// _, err = res.Results[0].Files["stderr"].Seek(0, 0)
-		// if err != nil {
-		// 	return executeRes, errors.New("failed to reseek execute stderr")
-		// }
-		executeOutput, err = io.ReadAll(res.Results[0].Files["stderr"])
-		if err != nil && err != io.EOF {
-			return executeRes, errors.New("failed to read execute stderr")
-		}
-	}
-	executeRes.Output = string(executeOutput)
-
+	// var executeOutput []byte
+	// var err error
+	// if res.Results[0].ExitStatus == 0 {
+	// 	// _, err = res.Results[0].Files["stdout"].Seek(0, 0)
+	// 	// if err != nil {
+	// 	// 	return executeRes, errors.New("failed to reseek execute stdout: " + err.Error())
+	// 	// }
+	// 	executeOutput, err = io.ReadAll(res.Results[0].Files["stdout"])
+	// 	if err != nil && err != io.EOF {
+	// 		return executeRes, errors.New("failed to read execute stdout: " + err.Error())
+	// 	}
+	// } else {
+	// 	// _, err = res.Results[0].Files["stderr"].Seek(0, 0)
+	// 	// if err != nil {
+	// 	// 	return executeRes, errors.New("failed to reseek execute stderr")
+	// 	// }
+	// 	executeOutput, err = io.ReadAll(res.Results[0].Files["stderr"])
+	// 	if err != nil && err != io.EOF {
+	// 		return executeRes, errors.New("failed to read execute stderr")
+	// 	}
+	// }
+	// executeRes.Output = string(executeOutput)
+	files := res.Results[0].Files
+	executeRes.Output = fmt.Sprintf(
+		"stdout: %s\nstderr: %s",
+		lo.Must(io.ReadAll(files["stdout"])),
+		lo.Must(io.ReadAll(files["stderr"])),
+	)
 	return executeRes, nil
 }
 

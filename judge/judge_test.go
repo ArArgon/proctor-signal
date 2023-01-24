@@ -62,9 +62,9 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestExecuteCmd(t *testing.T) {
-	assert.Equal(t, "114514", judgeManger.ExecuteCmd(context.Background(), "gcc -v"))
-}
+// func TestExecuteCmd(t *testing.T) {
+// 	assert.Equal(t, "114514", judgeManger.ExecuteCmd(context.Background(), "gcc -v"))
+// }
 
 func TestCompile(t *testing.T) {
 	p := &model.Problem{DefaultTimeLimit: uint32(time.Second * 4), DefaultSpaceLimit: 104857600}
