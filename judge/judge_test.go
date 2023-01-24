@@ -112,10 +112,10 @@ func TestExecuteFile(t *testing.T) {
 		t.Run(language, func(t *testing.T) {
 			executeRes, err := judgeManger.ExecuteFile(ctx, conf.ArtifactName, cacheFiles[language], stdin, p)
 			assert.NoError(t, err)
-			assert.Equal(t, string(stdout), executeRes.Output)
 			if executeRes.ExitStatus != 0 {
 				t.Errorf("failed to execute: executeRes.ExitStatus != 0, executeRes: %v", executeRes)
 			}
+			assert.Equal(t, string(stdout), executeRes.Output)
 		})
 	}
 }
