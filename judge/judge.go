@@ -139,11 +139,19 @@ func (m *Manager) Compile(ctx context.Context, p *model.Problem, sub *model.Subm
 	var compileOutput []byte
 	var err error
 	if res.Results[0].ExitStatus == 0 {
+		_, err = res.Results[0].Files["stdout"].Seek(0, 0)
+		if err != nil {
+			return compileRes, errors.New("failed to read compile stdout")
+		}
 		compileOutput, err = io.ReadAll(res.Results[0].Files["stdout"])
 		if err != nil && err != io.EOF {
 			return compileRes, errors.New("failed to read compile stdout")
 		}
 	} else {
+		_, err = res.Results[0].Files["stderr"].Seek(0, 0)
+		if err != nil {
+			return compileRes, errors.New("failed to read compile stderr")
+		}
 		compileOutput, err = io.ReadAll(res.Results[0].Files["stderr"])
 		if err != nil && err != io.EOF {
 			return compileRes, errors.New("failed to read compile stderr")
@@ -191,11 +199,19 @@ func (m *Manager) ExecuteFile(ctx context.Context, filename, fileID string, p *m
 	var executeOutput []byte
 	var err error
 	if res.Results[0].ExitStatus == 0 {
+		_, err = res.Results[0].Files["stdout"].Seek(0, 0)
+		if err != nil {
+			return executeRes, errors.New("failed to read execute stdout")
+		}
 		executeOutput, err = io.ReadAll(res.Results[0].Files["stdout"])
 		if err != nil && err != io.EOF {
 			return executeRes, errors.New("failed to read execute stdout")
 		}
 	} else {
+		_, err = res.Results[0].Files["stderr"].Seek(0, 0)
+		if err != nil {
+			return executeRes, errors.New("failed to read execute stderr")
+		}
 		executeOutput, err = io.ReadAll(res.Results[0].Files["stderr"])
 		if err != nil && err != io.EOF {
 			return executeRes, errors.New("failed to read execute stderr")
@@ -228,7 +244,7 @@ func (m *Manager) ExecuteCmd(ctx context.Context, cmd string) string {
 
 	files := res.Results[0].Files
 	for _, f := range files {
-		f.Seek(0, 0)
+		_, _ = f.Seek(0, 0)
 	}
 
 	return fmt.Sprintf(
