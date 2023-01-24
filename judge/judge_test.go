@@ -73,6 +73,7 @@ func TestCompile(t *testing.T) {
 	sub := &model.Submission{Language: "c", SourceCode: codes}
 
 	compileRes, err := judgeManger.Compile(context.Background(), p, sub)
+	assert.NotNil(t, compileRes)
 	assert.NoError(t, err)
 
 	executeRes, err := judgeManger.ExecuteFile(context.Background(), "a.out", compileRes.ArtifactFileIDs["a.out"], p)

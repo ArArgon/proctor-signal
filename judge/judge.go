@@ -223,11 +223,9 @@ func (m *Manager) ExecuteFile(ctx context.Context, filename, fileID string, p *m
 	// }
 	// executeRes.Output = string(executeOutput)
 	files := res.Results[0].Files
-	executeRes.Output = fmt.Sprintf(
-		"stdout: %s\nstderr: %s",
-		lo.Must(io.ReadAll(files["stdout"])),
-		lo.Must(io.ReadAll(files["stderr"])),
-	)
+	stdout, _ := io.ReadAll(files["stdout"])
+	stderr, _ := io.ReadAll(files["stderr"])
+	executeRes.Output = fmt.Sprintf("stdout: %s\nstderr: %s", &stdout, &stderr)
 	return executeRes, nil
 }
 
