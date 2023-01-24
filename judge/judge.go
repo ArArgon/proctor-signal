@@ -126,7 +126,7 @@ func (m *Manager) Compile(ctx context.Context, p *model.Problem, sub *model.Subm
 	if res.Results[0].ExitStatus == 0 {
 		_, err = res.Results[0].Files["stdout"].Seek(0, 0)
 		if err != nil {
-			return compileRes, errors.New("failed to read compile stdout")
+			return compileRes, errors.New("failed to reseek compile stdout")
 		}
 		compileOutput, err = io.ReadAll(res.Results[0].Files["stdout"])
 		if err != nil && err != io.EOF {
@@ -135,7 +135,7 @@ func (m *Manager) Compile(ctx context.Context, p *model.Problem, sub *model.Subm
 	} else {
 		_, err = res.Results[0].Files["stderr"].Seek(0, 0)
 		if err != nil {
-			return compileRes, errors.New("failed to read compile stderr")
+			return compileRes, errors.New("failed to reseek compile stderr")
 		}
 		compileOutput, err = io.ReadAll(res.Results[0].Files["stderr"])
 		if err != nil && err != io.EOF {
@@ -203,6 +203,7 @@ func (m *Manager) ExecuteFile(ctx context.Context, filename, fileID string, p *m
 		}
 	}
 	executeRes.Output = string(executeOutput)
+
 	return executeRes, nil
 }
 
