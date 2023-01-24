@@ -147,8 +147,8 @@ func (m *Manager) Compile(ctx context.Context, p *model.Problem, sub *model.Subm
 	return compileRes, nil
 }
 
-// ExecuteFile execute a runnable file.
-func (m *Manager) ExecuteFile(ctx context.Context, filename, fileID string, p *model.Problem) (*ExecuteRes, error) {
+// ExecuteFile execute a runnable file with stdin.
+func (m *Manager) ExecuteFile(ctx context.Context, filename, fileID, stdin string, p *model.Problem) (*ExecuteRes, error) {
 	res := <-m.worker.Execute(ctx, &worker.Request{
 		Cmd: []worker.Cmd{{
 			Env:         []string{"PATH=/usr/bin:/bin"},
@@ -157,7 +157,7 @@ func (m *Manager) ExecuteFile(ctx context.Context, filename, fileID string, p *m
 			MemoryLimit: runner.Size(p.DefaultSpaceLimit),
 			ProcLimit:   50,
 			Files: []worker.CmdFile{
-				&worker.MemoryFile{Content: []byte("")},
+				&worker.MemoryFile{Content: []byte(stdin)},
 				&worker.Collector{Name: "stdout", Max: 10240},
 				&worker.Collector{Name: "stderr", Max: 10240},
 			},
