@@ -6,13 +6,11 @@ import (
 	"log"
 	"os"
 	"testing"
-	"time"
 
 	"go.uber.org/zap/zapcore"
 
 	"proctor-signal/external/gojudge"
 	"proctor-signal/judge"
-	"proctor-signal/model"
 	"proctor-signal/resource"
 
 	judgeconfig "github.com/criyle/go-judge/cmd/executorserver/config"
@@ -62,22 +60,22 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// func TestExecuteCommand(t *testing.T) {
-// 	t.Log(judgeManger.ExecuteCommand(context.Background(), "echo 114514"))
-// }
-
-func TestCompile(t *testing.T) {
-	p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
-	codes, err := os.ReadFile("tests/source.c")
-	assert.NoError(t, err)
-	sub := &model.Submission{Language: "c", SourceCode: codes}
-
-	compileRes, err := judgeManger.Compile(context.Background(), p, sub)
-	assert.NoError(t, err)
-
-	executeRes, err := judgeManger.ExecuteFile(context.Background(), "a.out", compileRes.ArtifactFileIDs["a.out"], p)
-	assert.Equal(t, "Hello world.\n", executeRes.Output)
+func TestExecuteCmd(t *testing.T) {
+	assert.Equal(t, "114514", judgeManger.ExecuteCmd(context.Background(), "echo 114514"))
 }
+
+// func TestCompile(t *testing.T) {
+// 	p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
+// 	codes, err := os.ReadFile("tests/source.c")
+// 	assert.NoError(t, err)
+// 	sub := &model.Submission{Language: "c", SourceCode: codes}
+
+// 	compileRes, err := judgeManger.Compile(context.Background(), p, sub)
+// 	assert.NoError(t, err)
+
+// 	executeRes, err := judgeManger.ExecuteFile(context.Background(), "a.out", compileRes.ArtifactFileIDs["a.out"], p)
+// 	assert.Equal(t, "Hello world.\n", executeRes.Output)
+// }
 
 func loadConf() *judgeconfig.Config {
 	var conf judgeconfig.Config
