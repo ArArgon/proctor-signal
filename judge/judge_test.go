@@ -66,7 +66,7 @@ func TestMain(m *testing.M) {
 // 	assert.Equal(t, "114514", judgeManger.ExecuteCmd(context.Background(), "gcc -v"))
 // }
 
-func TestCompile(t *testing.T) {
+func TestCompileAndExecuteCmd(t *testing.T) {
 	p := &model.Problem{DefaultTimeLimit: uint32(time.Second * 4), DefaultSpaceLimit: 104857600}
 	codes, err := os.ReadFile("tests/source.c")
 	assert.NoError(t, err)
