@@ -196,76 +196,62 @@ func (m *Manager) ExecuteFile(ctx context.Context, filename, fileID string, p *m
 	}
 
 	// read execute output
-	for _, f := range res.Results[0].Files {
-		_, _ = f.Seek(0, 0)
+	var executeOutput []byte
+	var err error
+	if res.Results[0].ExitStatus == 0 {
+		_, err = res.Results[0].Files["stdout"].Seek(0, 0)
+		if err != nil {
+			return executeRes, errors.New("failed to reseek execute stdout: " + err.Error())
+		}
+		executeOutput, err = io.ReadAll(res.Results[0].Files["stdout"])
+		if err != nil && err != io.EOF {
+			return executeRes, errors.New("failed to read execute stdout: " + err.Error())
+		}
+	} else {
+		_, err = res.Results[0].Files["stderr"].Seek(0, 0)
+		if err != nil {
+			return executeRes, errors.New("failed to reseek execute stderr")
+		}
+		executeOutput, err = io.ReadAll(res.Results[0].Files["stderr"])
+		if err != nil && err != io.EOF {
+			return executeRes, errors.New("failed to read execute stderr")
+		}
 	}
-
-	// var executeOutput []byte
-	// var err error
-	// if res.Results[0].ExitStatus == 0 {
-	// 	// _, err = res.Results[0].Files["stdout"].Seek(0, 0)
-	// 	// if err != nil {
-	// 	// 	return executeRes, errors.New("failed to reseek execute stdout: " + err.Error())
-	// 	// }
-	// 	executeOutput, err = io.ReadAll(res.Results[0].Files["stdout"])
-	// 	if err != nil && err != io.EOF {
-	// 		return executeRes, errors.New("failed to read execute stdout: " + err.Error())
-	// 	}
-	// } else {
-	// 	// _, err = res.Results[0].Files["stderr"].Seek(0, 0)
-	// 	// if err != nil {
-	// 	// 	return executeRes, errors.New("failed to reseek execute stderr")
-	// 	// }
-	// 	executeOutput, err = io.ReadAll(res.Results[0].Files["stderr"])
-	// 	if err != nil && err != io.EOF {
-	// 		return executeRes, errors.New("failed to read execute stderr")
-	// 	}
-	// }
-	// executeRes.Output = string(executeOutput)
-	files := res.Results[0].Files
-	stdout, _ := io.ReadAll(files["stdout"])
-	// if err != nil && err != io.EOF {
-	// 	return executeRes, errors.New("failed to read execute stdout: " + err.Error())
-	// }
-	stderr, _ := io.ReadAll(files["stderr"])
-	// if err != nil {
-	// 	return executeRes, errors.New("failed to read execute stderr: " + err.Error())
-	// }
-	executeRes.Output = fmt.Sprintf("stdout: %s\nstderr: %s", &stdout, &stderr)
+	executeRes.Output = string(executeOutput)
 	return executeRes, nil
 }
 
-func (m *Manager) ExecuteCmd(ctx context.Context, cmd string) string {
-	res := <-m.worker.Execute(ctx, &worker.Request{
-		Cmd: []worker.Cmd{{
-			Env:         []string{"PATH=/usr/bin:/bin"},
-			Args:        strings.Split(cmd, " "),
-			CPULimit:    time.Second,
-			MemoryLimit: 104857600,
-			ProcLimit:   50,
-			Files: []worker.CmdFile{
-				&worker.MemoryFile{Content: []byte("")},
-				&worker.Collector{Name: "stdout", Max: 10240},
-				&worker.Collector{Name: "stderr", Max: 10240},
-			},
-			CopyOut: []worker.CmdCopyOutFile{
-				{Name: "stdout", Optional: true},
-				{Name: "stderr", Optional: true},
-			},
-		}},
-	})
+// func (m *Manager) ExecuteCmd(ctx context.Context, cmd string) string {
+// 	res := <-m.worker.Execute(ctx, &worker.Request{
+// 		Cmd: []worker.Cmd{{
+// 			Env:         []string{"PATH=/usr/bin:/bin"},
+// 			Args:        strings.Split(cmd, " "),
+// 			CPULimit:    time.Second,
+// 			MemoryLimit: 104857600,
+// 			ProcLimit:   50,
+// 			Files: []worker.CmdFile{
+// 				&worker.MemoryFile{Content: []byte("")},
+// 				&worker.Collector{Name: "stdout", Max: 10240},
+// 				&worker.Collector{Name: "stderr", Max: 10240},
+// 			},
+// 			CopyOut: []worker.CmdCopyOutFile{
+// 				{Name: "stdout", Optional: true},
+// 				{Name: "stderr", Optional: true},
+// 			},
+// 		}},
+// 	})
 
-	files := res.Results[0].Files
-	for _, f := range files {
-		_, _ = f.Seek(0, 0)
-	}
+// 	files := res.Results[0].Files
+// 	for _, f := range files {
+// 		_, _ = f.Seek(0, 0)
+// 	}
 
-	return fmt.Sprintf(
-		"stdout: %s\nstderr: %s",
-		lo.Must(io.ReadAll(files["stdout"])),
-		lo.Must(io.ReadAll(files["stderr"])),
-	)
-}
+// 	return fmt.Sprintf(
+// 		"stdout: %s\nstderr: %s",
+// 		lo.Must(io.ReadAll(files["stdout"])),
+// 		lo.Must(io.ReadAll(files["stderr"])),
+// 	)
+// }
 
 func (m *Manager) ExecuteCommand(ctx context.Context, cmd string) string {
 	res := <-m.worker.Execute(ctx, &worker.Request{
