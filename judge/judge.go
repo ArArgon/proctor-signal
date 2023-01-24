@@ -223,8 +223,14 @@ func (m *Manager) ExecuteFile(ctx context.Context, filename, fileID string, p *m
 	// }
 	// executeRes.Output = string(executeOutput)
 	files := res.Results[0].Files
-	stdout, _ := io.ReadAll(files["stdout"])
-	stderr, _ := io.ReadAll(files["stderr"])
+	stdout, err := io.ReadAll(files["stdout"])
+	if err != nil && err != io.EOF {
+		return executeRes, errors.New("failed to read execute stdout: " + err.Error())
+	}
+	stderr, err := io.ReadAll(files["stderr"])
+	if err != nil {
+		return executeRes, errors.New("failed to read execute stderr: " + err.Error())
+	}
 	executeRes.Output = fmt.Sprintf("stdout: %s\nstderr: %s", &stdout, &stderr)
 	return executeRes, nil
 }
