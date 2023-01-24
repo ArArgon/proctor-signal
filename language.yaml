@@ -1,29 +1,24 @@
-test:
-    SourceName: source.c
-    ArtifactName: a.out
-    CompileCmd: "env"
-    ExecuteCmd: "${ArtifactName}"
-
 c:
     SourceName: source.c
     ArtifactName: a.out
-    CompileCmd: "/usr/bin/gcc $SourceName -o a.out"
-    ExecuteCmd: "${ArtifactName}"
+    CompileCmd: "/usr/bin/gcc source.c -o a.out"
+    ExecuteCmd: "a.out"
 
 cpp:
     SourceName: source.cpp
     ArtifactName: a.out
-    CompileCmd: "/usr/bin/g++ ${SourceName} -o ${ArtifactName}"
-    ExecuteCmd: "${ArtifactName}"
+    CompileCmd: "/usr/bin/g++ source.cpp -o a.out"
+    ExecuteCmd: "a.out"
     Options:
         o2: "-O2"
         cpp14: "--std=c++14"
 
 java:
-    SourceName: Solution.java
-    ArtifactName: Solution.class
-    CompileCmd: "/usr/bin/java ${SourceName}"
-    ExecuteCmd: "/usr/bin/java -jar ${ArtifactName}"
+    SourceName: Source.java
+    ArtifactName: Source.class
+    CompileCmd: "/usr/bin/java Source.java"
+    ExecuteCmd: "/usr/bin/java -jar Source.class"
+
 python:
     SourceName: source.py
     ExecuteCmd: "/usr/bin/python3 ${SourceName}"
