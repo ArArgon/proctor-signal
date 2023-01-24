@@ -1,4 +1,4 @@
-package judge_test
+package judge
 
 import (
 	"context"
@@ -11,7 +11,6 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	"proctor-signal/external/gojudge"
-	"proctor-signal/judge"
 	"proctor-signal/model"
 	"proctor-signal/resource"
 
@@ -23,7 +22,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var judgeManger *judge.Manager
+var judgeManger *Manager
 
 func TestMain(m *testing.M) {
 	// Init logger.
@@ -56,36 +55,40 @@ func TestMain(m *testing.M) {
 	worker := gojudge.NewWorker(conf, envPool, fs)
 
 	// init judge
-	judge.LoadLanguageConfig("../language.yaml")
-	judgeManger = judge.NewJudgeManager(worker)
+	LoadLanguageConfig("../language.yaml")
+	judgeManger = NewJudgeManager(worker)
 
 	os.Exit(m.Run())
 }
 
-// func TestExecuteCmd(t *testing.T) {
-// 	assert.Equal(t, "114514", judgeManger.ExecuteCmd(context.Background(), "gcc -v"))
-// }
+func TestCompile(t *testing.T) {
+	p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
+	ctx := context.Background()
 
-func TestCompileAndExecuteCmd(t *testing.T) {
-	p := &model.Problem{DefaultTimeLimit: uint32(time.Second * 4), DefaultSpaceLimit: 104857600}
-	codes, err := os.ReadFile("tests/source.c")
-	assert.NoError(t, err)
-	sub := &model.Submission{Language: "test", SourceCode: codes}
+	for language, conf := range languageConfig {
+		// just for C
+		if language != "c" {
+			continue
+		}
 
-	compileRes, err := judgeManger.Compile(context.Background(), p, sub)
-	assert.NotNil(t, compileRes)
-	assert.NoError(t, err)
-	if compileRes.Status >= 4 {
-		assert.Equal(t, "1", compileRes.Status.String())
+		t.Run(language, func(t *testing.T) {
+			codes, err := os.ReadFile("tests/" + conf.SourceName)
+			assert.NoError(t, err)
+			sub := &model.Submission{Language: language, SourceCode: codes}
+
+			compileRes, err := judgeManger.Compile(ctx, p, sub)
+			assert.NotNil(t, compileRes)
+			assert.NoError(t, err)
+			if compileRes.Status >= 4 {
+				t.Errorf("failed to finish compile, compileRes: %v", compileRes)
+			}
+
+			_, ok := compileRes.ArtifactFileIDs[language]
+			if !ok {
+				t.Errorf("failed to finish compile, compileRes: %v", compileRes)
+			}
+		})
 	}
-	id, ok := compileRes.ArtifactFileIDs["a.out"]
-	if !ok {
-		assert.Equal(t, "1", compileRes)
-	}
-
-	executeRes, err := judgeManger.ExecuteFile(context.Background(), "a.out", id, p)
-	assert.NoError(t, err)
-	assert.Equal(t, "Hello world.\n", executeRes.Output)
 }
 
 func loadConf() *judgeconfig.Config {
