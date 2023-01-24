@@ -80,12 +80,12 @@ func TestCompile(t *testing.T) {
 			assert.NotNil(t, compileRes)
 			assert.NoError(t, err)
 			if compileRes.Status >= 4 {
-				t.Errorf("failed to finish compile, compileRes: %v", compileRes)
+				t.Errorf("failed to finish compile: compileRes.Status >= 4, compileRes: %v", compileRes)
 			}
 
-			_, ok := compileRes.ArtifactFileIDs[language]
+			_, ok := compileRes.ArtifactFileIDs[conf.ArtifactName]
 			if !ok {
-				t.Errorf("failed to finish compile, compileRes: %v", compileRes)
+				t.Errorf("failed to finish compile: failed to cache fille, compileRes: %v", compileRes)
 			}
 		})
 	}
