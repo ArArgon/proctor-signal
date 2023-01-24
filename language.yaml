@@ -1,3 +1,9 @@
+test:
+    SourceName: source.c
+    ArtifactName: a.out
+    CompileCmd: "env"
+    ExecuteCmd: "${ArtifactName}"
+
 c:
     SourceName: source.c
     ArtifactName: a.out

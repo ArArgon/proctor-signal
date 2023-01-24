@@ -70,7 +70,7 @@ func TestCompileAndExecuteCmd(t *testing.T) {
 	p := &model.Problem{DefaultTimeLimit: uint32(time.Second * 4), DefaultSpaceLimit: 104857600}
 	codes, err := os.ReadFile("tests/source.c")
 	assert.NoError(t, err)
-	sub := &model.Submission{Language: "c", SourceCode: codes}
+	sub := &model.Submission{Language: "test", SourceCode: codes}
 
 	compileRes, err := judgeManger.Compile(context.Background(), p, sub)
 	assert.NotNil(t, compileRes)
