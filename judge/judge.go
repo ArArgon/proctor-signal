@@ -201,11 +201,11 @@ func (m *Manager) ExecuteFile(ctx context.Context, filename, fileID string, p *m
 	if res.Results[0].ExitStatus == 0 {
 		_, err = res.Results[0].Files["stdout"].Seek(0, 0)
 		if err != nil {
-			return executeRes, errors.New("failed to read execute stdout")
+			return executeRes, errors.New("failed to read execute stdout: " + err.Error())
 		}
 		executeOutput, err = io.ReadAll(res.Results[0].Files["stdout"])
 		if err != nil && err != io.EOF {
-			return executeRes, errors.New("failed to read execute stdout")
+			return executeRes, errors.New("failed to read execute stdout: " + err.Error())
 		}
 	} else {
 		_, err = res.Results[0].Files["stderr"].Seek(0, 0)
