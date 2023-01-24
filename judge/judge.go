@@ -157,7 +157,7 @@ func (m *Manager) ExecuteFile(ctx context.Context, filename, fileID string, stdi
 			MemoryLimit: runner.Size(p.DefaultSpaceLimit),
 			ProcLimit:   50,
 			Files: []worker.CmdFile{
-				&worker.MemoryFile{Content: []byte(stdin)},
+				&worker.MemoryFile{Content: stdin},
 				&worker.Collector{Name: "stdout", Max: 10240},
 				&worker.Collector{Name: "stderr", Max: 10240},
 			},
