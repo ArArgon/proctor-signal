@@ -61,6 +61,8 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+var cacheFiles map[string]string
+
 func TestCompile(t *testing.T) {
 	p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
 	ctx := context.Background()
@@ -83,9 +85,31 @@ func TestCompile(t *testing.T) {
 				t.Errorf("failed to finish compile: compileRes.Status >= 4, compileRes: %v", compileRes)
 			}
 
-			_, ok := compileRes.ArtifactFileIDs[conf.ArtifactName]
+			id, ok := compileRes.ArtifactFileIDs[conf.ArtifactName]
 			if !ok {
 				t.Errorf("failed to finish compile: failed to cache fille, compileRes: %v", compileRes)
+			}
+			cacheFiles[language] = id
+		})
+	}
+}
+
+func TestExecuteFile(t *testing.T) {
+	p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
+	ctx := context.Background()
+
+	for language, conf := range languageConfig {
+		// just for C
+		if language != "c" {
+			continue
+		}
+
+		t.Run(language, func(t *testing.T) {
+			executeRes, err := judgeManger.ExecuteFile(ctx, conf.ArtifactName, cacheFiles[language], p)
+			assert.NoError(t, err)
+			assert.Equal(t, "Hello world!\n", executeRes.Output)
+			if executeRes.ExitStatus != 0 {
+				t.Errorf("failed to execute: executeRes.ExitStatus != 0, executeRes: %v", executeRes)
 			}
 		})
 	}
