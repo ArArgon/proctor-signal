@@ -83,9 +83,9 @@ func TestCompile(t *testing.T) {
 		assert.Equal(t, "1", compileRes)
 	}
 
-	// executeRes, err := judgeManger.ExecuteFile(context.Background(), "a.out", id, p)
-	// assert.NoError(t, err)
-	// assert.Equal(t, "Hello world.\n", executeRes.Output)
+	executeRes, err := judgeManger.ExecuteFile(context.Background(), "a.out", id, p)
+	assert.NoError(t, err)
+	assert.Equal(t, "Hello world.\n", executeRes.Output)
 }
 
 func loadConf() *judgeconfig.Config {
