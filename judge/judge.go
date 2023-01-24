@@ -227,6 +227,10 @@ func (m *Manager) ExecuteCmd(ctx context.Context, cmd string) string {
 	})
 
 	files := res.Results[0].Files
+	for _, f := range files {
+		f.Seek(0, 0)
+	}
+
 	return fmt.Sprintf(
 		"stdout: %s\nstderr: %s",
 		lo.Must(io.ReadAll(files["stdout"])),
