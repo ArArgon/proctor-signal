@@ -223,10 +223,10 @@ func (m *Manager) ExecuteFile(ctx context.Context, filename, fileID string, p *m
 	// }
 	// executeRes.Output = string(executeOutput)
 	files := res.Results[0].Files
-	stdout, err := io.ReadAll(files["stdout"])
-	if err != nil && err != io.EOF {
-		return executeRes, errors.New("failed to read execute stdout: " + err.Error())
-	}
+	stdout, _ := io.ReadAll(files["stdout"])
+	// if err != nil && err != io.EOF {
+	// 	return executeRes, errors.New("failed to read execute stdout: " + err.Error())
+	// }
 	stderr, err := io.ReadAll(files["stderr"])
 	if err != nil {
 		return executeRes, errors.New("failed to read execute stderr: " + err.Error())
