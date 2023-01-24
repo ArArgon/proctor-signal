@@ -66,6 +66,7 @@ var cacheFiles map[string]string
 func TestCompile(t *testing.T) {
 	p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
 	ctx := context.Background()
+	cacheFiles = make(map[string]string)
 
 	for language, conf := range languageConfig {
 		// just for C
