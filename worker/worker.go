@@ -133,7 +133,7 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 		sugar.With("err", err).Error("failed to read compile output")
 		return internErr, err
 	}
-	if compileRes.Status >= 4 {
+	if compileRes.ExitStatus != 0 {
 		sugar.With("err", compileRes.Status.String()).Error("failed to finish compile")
 		compileErr.Result.CompilerOutput = lo.ToPtr(compileRes.Output)
 		compileErr.Result.Remark = lo.ToPtr(compileRes.Error)
