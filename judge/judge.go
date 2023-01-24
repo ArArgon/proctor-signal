@@ -167,7 +167,7 @@ func (m *Manager) ExecuteFile(ctx context.Context, filename, fileID string, p *m
 	res := <-m.worker.Execute(ctx, &worker.Request{
 		Cmd: []worker.Cmd{{
 			Env:         []string{"PATH=/usr/bin:/bin"},
-			Args:        []string{filename},
+			Args:        []string{filename + "unknown"},
 			CPULimit:    time.Duration(p.DefaultTimeLimit),
 			MemoryLimit: runner.Size(p.DefaultSpaceLimit),
 			ProcLimit:   50,

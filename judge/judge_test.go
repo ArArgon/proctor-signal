@@ -76,6 +76,7 @@ func TestCompile(t *testing.T) {
 	assert.NoError(t, err)
 
 	executeRes, err := judgeManger.ExecuteFile(context.Background(), "a.out", compileRes.ArtifactFileIDs["a.out"], p)
+	assert.NoError(t, err)
 	assert.Equal(t, "Hello world.\n", executeRes.Output)
 }
 
