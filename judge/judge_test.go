@@ -75,8 +75,15 @@ func TestCompile(t *testing.T) {
 	compileRes, err := judgeManger.Compile(context.Background(), p, sub)
 	assert.NotNil(t, compileRes)
 	assert.NoError(t, err)
+	if compileRes.Status >= 4 {
+		assert.Equal(t, "1", compileRes.Status.String())
+	}
+	id, ok := compileRes.ArtifactFileIDs["a.out"]
+	if !ok {
+		assert.Equal(t, "1", compileRes)
+	}
 
-	executeRes, err := judgeManger.ExecuteFile(context.Background(), "a.out", compileRes.ArtifactFileIDs["a.out"], p)
+	executeRes, err := judgeManger.ExecuteFile(context.Background(), "a.out", id, p)
 	assert.NoError(t, err)
 	assert.Equal(t, "Hello world.\n", executeRes.Output)
 }
