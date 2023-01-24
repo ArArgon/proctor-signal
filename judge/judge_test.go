@@ -78,7 +78,7 @@ func TestCompile(t *testing.T) {
 	if compileRes.Status >= 4 {
 		assert.Equal(t, "1", compileRes.Status.String())
 	}
-	_, ok := compileRes.ArtifactFileIDs["a.out"]
+	id, ok := compileRes.ArtifactFileIDs["a.out"]
 	if !ok {
 		assert.Equal(t, "1", compileRes)
 	}
