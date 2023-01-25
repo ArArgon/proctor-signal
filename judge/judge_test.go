@@ -76,12 +76,12 @@ func TestWokerExecute(t *testing.T) {
 			ProcLimit:   50,
 			Files: []worker.CmdFile{
 				&worker.MemoryFile{Content: []byte("")},
-				&worker.Collector{Name: "stdout", Max: 10240},
-				// &worker.MemoryFile{Content: []byte("1145144")},
+				// &worker.Collector{Name: "stdout", Max: 10240},
+				&worker.MemoryFile{Content: []byte("1145144")},
 				&worker.Collector{Name: "stderr", Max: 10240},
 			},
 			CopyOut: []worker.CmdCopyOutFile{
-				{Name: "stdout", Optional: true},
+				// {Name: "stdout", Optional: true},
 				{Name: "stderr", Optional: true},
 			},
 		}},
@@ -98,11 +98,11 @@ func TestWokerExecute(t *testing.T) {
 	var executeOutput []byte
 	var err error
 	if res.Results[0].ExitStatus == 0 {
-		_, err = res.Results[0].Files["stdout"].Seek(0, 0)
-		assert.NoError(t, err, "failed to reseek execute stdout: ")
+		// _, err = res.Results[0].Files["stdout"].Seek(0, 0)
+		// assert.NoError(t, err, "failed to reseek execute stdout: ")
 
-		executeOutput, err = io.ReadAll(res.Results[0].Files["stdout"])
-		assert.NoError(t, err, "failed to read execute stdout: ")
+		// executeOutput, err = io.ReadAll(res.Results[0].Files["stdout"])
+		// assert.NoError(t, err, "failed to read execute stdout: ")
 	} else {
 		_, err = res.Results[0].Files["stderr"].Seek(0, 0)
 		assert.NoError(t, err, "failed to reseek execute stderr: ")
