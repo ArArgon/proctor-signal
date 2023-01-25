@@ -150,8 +150,8 @@ func TestCompile(t *testing.T) {
 func TestExecuteFile(t *testing.T) {
 	p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
 	ctx := context.Background()
-	// stdin, err := os.ReadFile("tests/input")
-	// assert.NoError(t, err, "failed to read tests/input")
+	stdin, err := os.ReadFile("tests/input")
+	assert.NoError(t, err, "failed to read tests/input")
 	stdout, err := os.ReadFile("tests/output")
 	assert.NoError(t, err, "failed to read tests/output")
 
@@ -162,7 +162,7 @@ func TestExecuteFile(t *testing.T) {
 		}
 
 		t.Run(language, func(t *testing.T) {
-			executeRes, err := judgeManger.ExecuteFile(ctx, conf.ArtifactName, compileResCaches[language].ArtifactFileIDs[conf.ArtifactName], &worker.MemoryFile{Content: []byte("")}, p)
+			executeRes, err := judgeManger.ExecuteFile(ctx, conf.ArtifactName, compileResCaches[language].ArtifactFileIDs[conf.ArtifactName], &worker.MemoryFile{Content: stdin}, p)
 			assert.NoError(t, err)
 			if executeRes.ExitStatus != 0 {
 				t.Errorf("failed to execute: executeRes.ExitStatus != 0, executeRes: %+v", executeRes)
