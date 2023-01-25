@@ -127,7 +127,7 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 		compileErr.Result.Remark = lo.ToPtr(err.Error())
 		return compileErr, err
 	}
-	defer w.judge.RemoveFiles(compileRes.ArtifactFileIDs)
+	defer w.judge.RemoveFiles(map[string]string{compileRes.ArtifactFileName: compileRes.ArtifactFileId})
 
 	if err != nil {
 		sugar.With("err", err).Error("failed to read compile output")

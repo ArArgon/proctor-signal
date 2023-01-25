@@ -35,14 +35,22 @@ type CompileOption struct {
 }
 
 type CompileRes struct {
-	Status          envexec.Status
-	ExitStatus      int
-	Error           string
-	Output          string
-	ArtifactFileIDs map[string]string
+	Status           envexec.Status
+	ExitStatus       int
+	Error            string
+	Output           string
+	ArtifactFileName string
+	ArtifactFileId   string
 }
 
 type ExecuteRes struct {
+	Status     envexec.Status
+	ExitStatus int
+	Error      string
+	Output     string
+}
+
+type JudgeRes struct {
 	Status     envexec.Status
 	ExitStatus int
 	Error      string
@@ -111,11 +119,17 @@ func (m *Manager) Compile(ctx context.Context, p *model.Problem, sub *model.Subm
 	})
 
 	compileRes := &CompileRes{
-		Status:          res.Results[0].Status,
-		ExitStatus:      res.Results[0].ExitStatus,
-		Error:           res.Results[0].Error,
-		ArtifactFileIDs: res.Results[0].FileIDs,
+		Status:           res.Results[0].Status,
+		ExitStatus:       res.Results[0].ExitStatus,
+		Error:            res.Results[0].Error,
+		ArtifactFileName: compileConf.ArtifactName,
 	}
+
+	compileRes.ArtifactFileId, ok = res.Results[0].FileIDs[compileConf.ArtifactName]
+	if !ok {
+		return compileRes, errors.New("failed to cache ArtifactFileName")
+	}
+
 	if res.Error != nil {
 		return compileRes, res.Error
 	}
@@ -206,6 +220,28 @@ func (m *Manager) ExecuteFile(ctx context.Context, fileName, fileID string, stdi
 
 	return executeRes, nil
 }
+
+// func (m *Manager) Judge(ctx context.Context, language string, artifactFileIDs map[string]string, subtask *model.Subtask, p *model.Problem) (*JudgeRes, error) {
+// 	conf, ok := languageConfig[language]
+// 	if !ok {
+// 		return nil, fmt.Errorf("compile config for %s not found", language)
+// 	}
+
+// 	fileName := conf.ArtifactName
+// 	fileID := artifactFileIDs[fileName]
+// 	for _, testcase := range subtask.TestCases {
+// 		executeRes, err := m.ExecuteFile(ctx, fileName, fileID, &worker.CachedFile{FileID: testcase.InputKey}, p)
+// 		if err != nil {
+// 			return nil, err
+// 		}
+
+// 		_, f := m.fs.Get(testcase.OutputKey)
+// 		f
+
+// 	}
+
+// 	return nil, nil
+// }
 
 func (m *Manager) ExecuteCommand(ctx context.Context, cmd string) string {
 	res := <-m.worker.Execute(ctx, &worker.Request{
