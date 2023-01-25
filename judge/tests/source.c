@@ -1,9 +1,9 @@
 #include <stdio.h>
 
-int main() {
+void main() {
     // char s[16];
     printf("hhhhh");
     // scanf("%s", s);
     // printf("%s\n", s);
-    return 6;
+    return;
 }
