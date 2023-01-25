@@ -76,7 +76,8 @@ func TestWokerExecute(t *testing.T) {
 			ProcLimit:   50,
 			Files: []worker.CmdFile{
 				&worker.MemoryFile{Content: []byte("")},
-				&worker.MemoryFile{Content: []byte("1145144")},
+				&worker.Collector{Name: "stderr", Max: 10240},
+				// &worker.MemoryFile{Content: []byte("1145144")},
 				&worker.Collector{Name: "stderr", Max: 10240},
 			},
 			CopyOut: []worker.CmdCopyOutFile{
