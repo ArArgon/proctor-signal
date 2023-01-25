@@ -221,27 +221,27 @@ func (m *Manager) ExecuteFile(ctx context.Context, fileName, fileID string, stdi
 	return executeRes, nil
 }
 
-func (m *Manager) Judge(ctx context.Context, ArtifactFileName, artifactFileID string, subtask *model.Subtask) (*JudgeRes, error) {
-	conf, ok := languageConfig[language]
-	if !ok {
-		return nil, fmt.Errorf("compile config for %s not found", language)
-	}
+// func (m *Manager) Judge(ctx context.Context, ArtifactFileName, artifactFileID string, subtask *model.Subtask, p *model.Problem) (*JudgeRes, error) {
+// 	conf, ok := languageConfig[language]
+// 	if !ok {
+// 		return nil, fmt.Errorf("compile config for %s not found", language)
+// 	}
 
-	fileName := conf.ArtifactName
-	fileID := artifactFileIDs[fileName]
-	for _, testcase := range subtask.TestCases {
-		executeRes, err := m.ExecuteFile(ctx, fileName, fileID, &worker.CachedFile{FileID: testcase.InputKey}, p)
-		if err != nil {
-			return nil, err
-		}
+// 	fileName := conf.ArtifactName
+// 	fileID := artifactFileIDs[fileName]
+// 	for _, testcase := range subtask.TestCases {
+// 		executeRes, err := m.ExecuteFile(ctx, fileName, fileID, &worker.CachedFile{FileID: testcase.InputKey}, p.)
+// 		if err != nil {
+// 			return nil, err
+// 		}
 
-		_, f := m.fs.Get(testcase.OutputKey)
-		f
+// 		_, f := m.fs.Get(testcase.OutputKey)
+// 		f
 
-	}
+// 	}
 
-	return nil, nil
-}
+// 	return nil, nil
+// }
 
 func (m *Manager) ExecuteCommand(ctx context.Context, cmd string) string {
 	res := <-m.worker.Execute(ctx, &worker.Request{
