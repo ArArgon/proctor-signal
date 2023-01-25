@@ -161,7 +161,7 @@ func TestExecuteFile(t *testing.T) {
 		}
 
 		t.Run(language, func(t *testing.T) {
-			executeRes, err := judgeManger.ExecuteFile(ctx, conf.ArtifactName, compileResCaches[language].ArtifactFileIDs[conf.ArtifactName], &worker.MemoryFile{Content: []byte("111999\n")}, p)
+			executeRes, err := judgeManger.ExecuteFile(ctx, conf.ArtifactName, compileResCaches[language].ArtifactFileIDs[conf.ArtifactName], &worker.MemoryFile{Content: []byte("")}, p)
 			assert.NoError(t, err)
 			if executeRes.ExitStatus != 0 {
 				t.Errorf("failed to execute: executeRes.ExitStatus != 0, executeRes: %+v", executeRes)
