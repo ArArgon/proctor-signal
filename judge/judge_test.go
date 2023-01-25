@@ -170,7 +170,7 @@ func TestExecuteFile(t *testing.T) {
 			if executeRes.ExitStatus != 0 {
 				t.Errorf("failed to execute: executeRes.ExitStatus != 0, executeRes: %+v", executeRes)
 			}
-			assert.Equal(t, string(stdout), executeRes.Output, "stdin: ", string(stdin))
+			assert.Equal(t, string(stdout), executeRes.Output, "stdin: "+string(stdin))
 		})
 	}
 }
