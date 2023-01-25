@@ -39,6 +39,8 @@ type CompileRes struct {
 	ExitStatus       int
 	Error            string
 	Output           string
+	TotalTime        time.Duration
+	TotalSpace       runner.Size
 	ArtifactFileName string
 	ArtifactFileId   string
 }
@@ -48,6 +50,8 @@ type ExecuteRes struct {
 	ExitStatus int
 	Error      string
 	Output     string
+	TotalTime  time.Duration
+	TotalSpace runner.Size
 }
 
 type JudgeRes struct {
@@ -122,6 +126,8 @@ func (m *Manager) Compile(ctx context.Context, p *model.Problem, sub *model.Subm
 		Status:           res.Results[0].Status,
 		ExitStatus:       res.Results[0].ExitStatus,
 		Error:            res.Results[0].Error,
+		TotalTime:        res.Results[0].RunTime,
+		TotalSpace:       res.Results[0].Memory,
 		ArtifactFileName: compileConf.ArtifactName,
 	}
 
@@ -189,6 +195,8 @@ func (m *Manager) ExecuteFile(ctx context.Context, fileName, fileID string, stdi
 		Status:     res.Results[0].Status,
 		ExitStatus: res.Results[0].ExitStatus,
 		Error:      res.Results[0].Error,
+		TotalTime:  res.Results[0].RunTime,
+		TotalSpace: res.Results[0].Memory,
 	}
 	if res.Error != nil {
 		return executeRes, res.Error
