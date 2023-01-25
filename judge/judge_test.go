@@ -165,7 +165,7 @@ func TestExecuteFile(t *testing.T) {
 		}
 
 		t.Run(language, func(t *testing.T) {
-			name, _ := judgeManger.fs.Get(fileCaches[language])
+			name, _ := judgeManger.fs.Get(compileResCaches[language].ArtifactFileId)
 			assert.Equal(t, conf.ArtifactName, name)
 
 			executeRes, err := judgeManger.ExecuteFile(ctx, name,
