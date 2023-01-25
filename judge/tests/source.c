@@ -5,5 +5,5 @@ int main() {
     printf("hhhhh");
     // scanf("%s", s);
     // printf("%s\n", s);
-    return 0;
+    return 6;
 }
