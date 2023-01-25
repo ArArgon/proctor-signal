@@ -15,6 +15,7 @@ import (
 	"proctor-signal/resource"
 
 	judgeconfig "github.com/criyle/go-judge/cmd/executorserver/config"
+	"github.com/criyle/go-judge/worker"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/criyle/go-sandbox/container"
@@ -110,7 +111,7 @@ func TestExecuteFile(t *testing.T) {
 		}
 
 		t.Run(language, func(t *testing.T) {
-			executeRes, err := judgeManger.ExecuteFile(ctx, conf.ArtifactName, cacheFiles[language], stdin, p)
+			executeRes, err := judgeManger.ExecuteFile(ctx, conf.ArtifactName, cacheFiles[language], &worker.MemoryFile{Content: stdin}, p)
 			assert.NoError(t, err)
 			if executeRes.ExitStatus != 0 {
 				t.Errorf("failed to execute: executeRes.ExitStatus != 0, executeRes: %v", executeRes)
