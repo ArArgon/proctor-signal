@@ -152,18 +152,19 @@ func (m *Manager) ExecuteFile(ctx context.Context, filename, fileID string, inpu
 	res := <-m.worker.Execute(ctx, &worker.Request{
 		Cmd: []worker.Cmd{{
 			Env:         []string{"PATH=/usr/bin:/bin"},
-			Args:        []string{filename, "<", "input"},
+			Args:        []string{filename},
 			CPULimit:    time.Duration(p.DefaultTimeLimit),
 			MemoryLimit: runner.Size(p.DefaultSpaceLimit),
 			ProcLimit:   50,
 			Files: []worker.CmdFile{
-				&worker.MemoryFile{Content: []byte("")},
+				// &worker.MemoryFile{Content: []byte("")},
+				input,
 				&worker.Collector{Name: "stdout", Max: 10240},
 				&worker.Collector{Name: "stderr", Max: 10240},
 			},
 			CopyIn: map[string]worker.CmdFile{
 				filename: &worker.CachedFile{FileID: fileID},
-				"input":  input,
+				// "input":  input,
 			},
 			CopyOut: []worker.CmdCopyOutFile{
 				{Name: "stdout", Optional: true},

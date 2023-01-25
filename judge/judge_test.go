@@ -137,7 +137,7 @@ func TestCompile(t *testing.T) {
 			compileRes, err := judgeManger.Compile(ctx, p, sub)
 			assert.NotNil(t, compileRes)
 			assert.NoError(t, err)
-			if compileRes.Status != 0 {
+			if compileRes.ExitStatus != 0 {
 				t.Errorf("failed to finish compile: compileRes.Status != 0, compileRes: %+v", compileRes)
 			}
 
