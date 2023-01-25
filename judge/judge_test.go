@@ -3,6 +3,7 @@ package judge
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"testing"
@@ -166,7 +167,7 @@ func TestExecuteFile(t *testing.T) {
 			if executeRes.ExitStatus != 0 {
 				t.Errorf("failed to execute: executeRes.ExitStatus != 0, executeRes: %+v", executeRes)
 			}
-			assert.Equal(t, string(stdout), executeRes.Output, compileResCaches[language], executeRes)
+			assert.Equal(t, string(stdout), executeRes.Output, fmt.Sprintf("compileRes: %+v, executeRes: %+v", compileResCaches[language], executeRes))
 		})
 	}
 }
