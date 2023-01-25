@@ -158,7 +158,7 @@ func TestExecuteFile(t *testing.T) {
 	stdin := "Hello,world.\n" // should not contain space
 	stdout := stdin
 
-	for language, _ := range languageConfig {
+	for language, conf := range languageConfig {
 		// just for C
 		if language != "c" {
 			continue
@@ -166,6 +166,8 @@ func TestExecuteFile(t *testing.T) {
 
 		t.Run(language, func(t *testing.T) {
 			name, _ := judgeManger.fs.Get(fileCaches[language])
+			assert.Equal(t, conf.ArtifactName, name)
+
 			executeRes, err := judgeManger.ExecuteFile(ctx, name,
 				compileResCaches[language].ArtifactFileId,
 				&worker.MemoryFile{Content: []byte(stdin)},
