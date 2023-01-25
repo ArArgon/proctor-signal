@@ -116,12 +116,12 @@ func TestWokerExecute(t *testing.T) {
 
 }
 
-var cacheFiles map[string]string
+var compileResCaches map[string]CompileRes
 
 func TestCompile(t *testing.T) {
 	p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
 	ctx := context.Background()
-	cacheFiles = make(map[string]string)
+	compileResCaches = make(map[string]CompileRes)
 
 	for language, conf := range languageConfig {
 		// just for C
@@ -137,15 +137,15 @@ func TestCompile(t *testing.T) {
 			compileRes, err := judgeManger.Compile(ctx, p, sub)
 			assert.NotNil(t, compileRes)
 			assert.NoError(t, err)
-			if compileRes.Status >= 4 {
-				t.Errorf("failed to finish compile: compileRes.Status >= 4, compileRes: %+v", compileRes)
+			if compileRes.Status != 0 {
+				t.Errorf("failed to finish compile: compileRes.Status != 0, compileRes: %+v", compileRes)
 			}
 
-			id, ok := compileRes.ArtifactFileIDs[conf.ArtifactName]
+			_, ok := compileRes.ArtifactFileIDs[conf.ArtifactName]
 			if !ok {
 				t.Errorf("failed to finish compile: failed to cache fille, compileRes: %+v", compileRes)
 			}
-			cacheFiles[language] = id
+			compileResCaches[language] = *compileRes
 		})
 	}
 }
@@ -165,12 +165,12 @@ func TestExecuteFile(t *testing.T) {
 		}
 
 		t.Run(language, func(t *testing.T) {
-			executeRes, err := judgeManger.ExecuteFile(ctx, conf.ArtifactName, cacheFiles[language], &worker.MemoryFile{Content: []byte("111999\n")}, p)
+			executeRes, err := judgeManger.ExecuteFile(ctx, conf.ArtifactName, compileResCaches[language].ArtifactFileIDs[conf.ArtifactName], &worker.MemoryFile{Content: []byte("111999\n")}, p)
 			assert.NoError(t, err)
 			if executeRes.ExitStatus != 0 {
 				t.Errorf("failed to execute: executeRes.ExitStatus != 0, executeRes: %+v", executeRes)
 			}
-			assert.Equal(t, string(stdout), executeRes.Output, "stdin: "+string(stdin))
+			assert.Equal(t, string(stdout), executeRes.Output, "stdin: "+string(stdin), compileResCaches[language], executeRes)
 		})
 	}
 }
