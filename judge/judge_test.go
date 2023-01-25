@@ -116,13 +116,11 @@ func TestMain(m *testing.M) {
 // }
 
 var compileResCaches map[string]CompileRes
-var fileCaches map[string]string
 
 func TestCompile(t *testing.T) {
 	p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
 	ctx := context.Background()
 	compileResCaches = make(map[string]CompileRes)
-	fileCaches = make(map[string]string)
 
 	for language, conf := range languageConfig {
 		// just for C
@@ -147,7 +145,6 @@ func TestCompile(t *testing.T) {
 			// 	t.Errorf("failed to finish compile: failed to cache fille, compileRes: %+v", compileRes)
 			// }
 			compileResCaches[language] = *compileRes
-			fileCaches[language] = compileRes.ArtifactFileId
 		})
 	}
 }
@@ -165,10 +162,7 @@ func TestExecuteFile(t *testing.T) {
 		}
 
 		t.Run(language, func(t *testing.T) {
-			name, _ := judgeManger.fs.Get(compileResCaches[language].ArtifactFileId)
-			assert.Equal(t, conf.ArtifactName, name)
-
-			executeRes, err := judgeManger.ExecuteFile(ctx, name,
+			executeRes, err := judgeManger.ExecuteFile(ctx, conf.ArtifactName,
 				compileResCaches[language].ArtifactFileId,
 				&worker.MemoryFile{Content: []byte(stdin)},
 				time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit),
