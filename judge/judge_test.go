@@ -3,6 +3,7 @@ package judge
 import (
 	"context"
 	"flag"
+	"io"
 	"log"
 	"os"
 	"testing"
@@ -62,6 +63,59 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+func TestWokerExecute(t *testing.T) {
+	ctx := context.Background()
+
+	res := <-judgeManger.worker.Execute(ctx, &worker.Request{
+		Cmd: []worker.Cmd{{
+			Env:         []string{"PATH=/usr/bin:/bin"},
+			Args:        []string{"cat", "input"},
+			CPULimit:    time.Second,
+			MemoryLimit: 104857600,
+			ProcLimit:   50,
+			Files: []worker.CmdFile{
+				&worker.MemoryFile{Content: []byte("")},
+				&worker.Collector{Name: "stdout", Max: 10240},
+				&worker.Collector{Name: "stderr", Max: 10240},
+			},
+			CopyIn: map[string]worker.CmdFile{
+				"input": &worker.MemoryFile{Content: []byte("114514")},
+			},
+			CopyOut: []worker.CmdCopyOutFile{
+				{Name: "stdout", Optional: true},
+				{Name: "stderr", Optional: true},
+			},
+		}},
+	})
+
+	executeRes := &ExecuteRes{
+		Status:     res.Results[0].Status,
+		ExitStatus: res.Results[0].ExitStatus,
+		Error:      res.Results[0].Error,
+	}
+	assert.NoError(t, res.Error)
+
+	// read execute output
+	var executeOutput []byte
+	var err error
+	if res.Results[0].ExitStatus == 0 {
+		_, err = res.Results[0].Files["stdout"].Seek(0, 0)
+		assert.NoError(t, err, "failed to reseek execute stdout: ")
+
+		executeOutput, err = io.ReadAll(res.Results[0].Files["stdout"])
+		assert.NoError(t, err, "failed to read execute stdout: ")
+	} else {
+		_, err = res.Results[0].Files["stderr"].Seek(0, 0)
+		assert.NoError(t, err, "failed to reseek execute stderr: ")
+
+		executeOutput, err = io.ReadAll(res.Results[0].Files["stderr"])
+		assert.NoError(t, err, "failed to read execute stderr: ")
+	}
+	executeRes.Output = string(executeOutput)
+	assert.Equal(t, executeRes.Output, "114514", executeRes)
+
+}
+
 var cacheFiles map[string]string
 
 func TestCompile(t *testing.T) {
@@ -84,12 +138,12 @@ func TestCompile(t *testing.T) {
 			assert.NotNil(t, compileRes)
 			assert.NoError(t, err)
 			if compileRes.Status >= 4 {
-				t.Errorf("failed to finish compile: compileRes.Status >= 4, compileRes: %v", compileRes)
+				t.Errorf("failed to finish compile: compileRes.Status >= 4, compileRes: %+v", compileRes)
 			}
 
 			id, ok := compileRes.ArtifactFileIDs[conf.ArtifactName]
 			if !ok {
-				t.Errorf("failed to finish compile: failed to cache fille, compileRes: %v", compileRes)
+				t.Errorf("failed to finish compile: failed to cache fille, compileRes: %+v", compileRes)
 			}
 			cacheFiles[language] = id
 		})
@@ -114,7 +168,7 @@ func TestExecuteFile(t *testing.T) {
 			executeRes, err := judgeManger.ExecuteFile(ctx, conf.ArtifactName, cacheFiles[language], &worker.MemoryFile{Content: stdin}, p)
 			assert.NoError(t, err)
 			if executeRes.ExitStatus != 0 {
-				t.Errorf("failed to execute: executeRes.ExitStatus != 0, executeRes: %v", executeRes)
+				t.Errorf("failed to execute: executeRes.ExitStatus != 0, executeRes: %+v", executeRes)
 			}
 			assert.Equal(t, string(stdout), executeRes.Output)
 		})
