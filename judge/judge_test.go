@@ -74,7 +74,7 @@ func TestWokerExecute(t *testing.T) {
 			MemoryLimit: 104857600,
 			ProcLimit:   50,
 			Files: []worker.CmdFile{
-				&worker.MemoryFile{Content: []byte("114514\n")},
+				&worker.MemoryFile{Content: []byte("11999\n")},
 				&worker.Collector{Name: "stdout", Max: 10240},
 				&worker.Collector{Name: "stderr", Max: 10240},
 			},
