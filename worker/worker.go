@@ -13,6 +13,8 @@ import (
 	"proctor-signal/resource"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/criyle/go-judge/worker"
+	"github.com/criyle/go-sandbox/runner"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.uber.org/multierr"
@@ -154,6 +156,15 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 		// TODO: Score this subtask.
 
 		// TODO: Return opinion.
+
+		for _, testcase := range subtask.TestCases {
+			executeRes, err := w.judge.ExecuteFile(ctx, compileRes.ArtifactFileName, compileRes.ArtifactFileId, &worker.CachedFile{FileID: testcase.InputKey}, time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit))
+			if err != nil {
+				return false
+			}
+			// TODO: compare executeRes.Ouput
+
+		}
 
 		return true
 	})
