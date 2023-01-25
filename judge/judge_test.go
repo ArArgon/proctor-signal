@@ -69,12 +69,12 @@ func TestWokerExecute(t *testing.T) {
 	res := <-judgeManger.worker.Execute(ctx, &worker.Request{
 		Cmd: []worker.Cmd{{
 			Env:         []string{"PATH=/usr/bin:/bin"},
-			Args:        []string{"cat", "input"},
+			Args:        []string{"cat"},
 			CPULimit:    time.Second,
 			MemoryLimit: 104857600,
 			ProcLimit:   50,
 			Files: []worker.CmdFile{
-				&worker.MemoryFile{Content: []byte("")},
+				&worker.MemoryFile{Content: []byte("114514\n")},
 				&worker.Collector{Name: "stdout", Max: 10240},
 				&worker.Collector{Name: "stderr", Max: 10240},
 			},
@@ -112,7 +112,7 @@ func TestWokerExecute(t *testing.T) {
 		assert.NoError(t, err, "failed to read execute stderr: ")
 	}
 	executeRes.Output = string(executeOutput)
-	assert.Equal(t, executeRes.Output, "114", executeRes)
+	assert.Equal(t, "114", executeRes.Output, executeRes)
 
 }
 
