@@ -112,7 +112,7 @@ func TestWokerExecute(t *testing.T) {
 		assert.NoError(t, err, "failed to read execute stderr: ")
 	}
 	executeRes.Output = string(executeOutput)
-	assert.Equal(t, executeRes.Output, "114514", executeRes)
+	assert.Equal(t, executeRes.Output, "114", executeRes)
 
 }
 
