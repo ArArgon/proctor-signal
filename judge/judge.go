@@ -207,38 +207,6 @@ func (m *Manager) ExecuteFile(ctx context.Context, fileName, fileID string, stdi
 	return executeRes, nil
 }
 
-// func (m *Manager) ExecuteCmd(ctx context.Context, cmd string) string {
-// 	res := <-m.worker.Execute(ctx, &worker.Request{
-// 		Cmd: []worker.Cmd{{
-// 			Env:         []string{"PATH=/usr/bin:/bin"},
-// 			Args:        strings.Split(cmd, " "),
-// 			CPULimit:    time.Second,
-// 			MemoryLimit: 104857600,
-// 			ProcLimit:   50,
-// 			Files: []worker.CmdFile{
-// 				&worker.MemoryFile{Content: []byte("")},
-// 				&worker.Collector{Name: "stdout", Max: 10240},
-// 				&worker.Collector{Name: "stderr", Max: 10240},
-// 			},
-// 			CopyOut: []worker.CmdCopyOutFile{
-// 				{Name: "stdout", Optional: true},
-// 				{Name: "stderr", Optional: true},
-// 			},
-// 		}},
-// 	})
-
-// 	files := res.Results[0].Files
-// 	for _, f := range files {
-// 		_, _ = f.Seek(0, 0)
-// 	}
-
-// 	return fmt.Sprintf(
-// 		"stdout: %s\nstderr: %s",
-// 		lo.Must(io.ReadAll(files["stdout"])),
-// 		lo.Must(io.ReadAll(files["stderr"])),
-// 	)
-// }
-
 func (m *Manager) ExecuteCommand(ctx context.Context, cmd string) string {
 	res := <-m.worker.Execute(ctx, &worker.Request{
 		Cmd: []worker.Cmd{{
