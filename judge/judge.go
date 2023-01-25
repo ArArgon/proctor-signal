@@ -148,23 +148,21 @@ func (m *Manager) Compile(ctx context.Context, p *model.Problem, sub *model.Subm
 }
 
 // ExecuteFile execute a runnable file with stdin.
-func (m *Manager) ExecuteFile(ctx context.Context, filename, fileID string, input worker.CmdFile, p *model.Problem) (*ExecuteRes, error) {
+func (m *Manager) ExecuteFile(ctx context.Context, fileName, fileID string, stdin worker.CmdFile, p *model.Problem) (*ExecuteRes, error) {
 	res := <-m.worker.Execute(ctx, &worker.Request{
 		Cmd: []worker.Cmd{{
 			Env:         []string{"PATH=/usr/bin:/bin"},
-			Args:        []string{filename},
+			Args:        []string{fileName},
 			CPULimit:    time.Duration(p.DefaultTimeLimit),
 			MemoryLimit: runner.Size(p.DefaultSpaceLimit),
 			ProcLimit:   50,
 			Files: []worker.CmdFile{
-				// &worker.MemoryFile{Content: []byte("")},
-				input,
+				stdin,
 				&worker.Collector{Name: "stdout", Max: 10240},
 				&worker.Collector{Name: "stderr", Max: 10240},
 			},
 			CopyIn: map[string]worker.CmdFile{
-				filename: &worker.CachedFile{FileID: fileID},
-				// "input":  input,
+				fileName: &worker.CachedFile{FileID: fileID},
 			},
 			CopyOut: []worker.CmdCopyOutFile{
 				{Name: "stdout", Optional: true},
