@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/criyle/go-sandbox/container"
+	"github.com/criyle/go-sandbox/runner"
 	"github.com/samber/lo"
 	"go.uber.org/zap"
 )
@@ -164,7 +165,8 @@ func TestExecuteFile(t *testing.T) {
 		t.Run(language, func(t *testing.T) {
 			executeRes, err := judgeManger.ExecuteFile(ctx, compileResCaches[language].ArtifactFileName,
 				compileResCaches[language].ArtifactFileId,
-				&worker.MemoryFile{Content: []byte(stdin)}, p,
+				&worker.MemoryFile{Content: []byte(stdin)},
+				time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit),
 			)
 			assert.NoError(t, err)
 			if executeRes.ExitStatus != 0 {
