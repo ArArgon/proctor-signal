@@ -149,8 +149,8 @@ func TestCompile(t *testing.T) {
 func TestExecuteFile(t *testing.T) {
 	p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
 	ctx := context.Background()
-	stdin, err := os.ReadFile("tests/input")
-	assert.NoError(t, err, "failed to read tests/input")
+	// stdin, err := os.ReadFile("tests/input")
+	// assert.NoError(t, err, "failed to read tests/input")
 	stdout, err := os.ReadFile("tests/output")
 	assert.NoError(t, err, "failed to read tests/output")
 
@@ -166,7 +166,7 @@ func TestExecuteFile(t *testing.T) {
 			if executeRes.ExitStatus != 0 {
 				t.Errorf("failed to execute: executeRes.ExitStatus != 0, executeRes: %+v", executeRes)
 			}
-			assert.Equal(t, string(stdout), executeRes.Output, "stdin: "+string(stdin), compileResCaches[language], executeRes)
+			assert.Equal(t, string(stdout), executeRes.Output, compileResCaches[language], executeRes)
 		})
 	}
 }
