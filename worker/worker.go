@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"io"
 	"sync"
 	"time"
 
@@ -135,7 +136,13 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 	}
 	if compileRes.ExitStatus != 0 {
 		sugar.With("err", compileRes.Status.String()).Error("failed to finish compile")
-		compileErr.Result.CompilerOutput = lo.ToPtr(compileRes.Output)
+		bytes, err := io.ReadAll(compileRes.Output)
+		if err != nil {
+			sugar.With("err", compileRes.Status.String()).Error("failed to read compile output")
+			compileErr.Result.CompilerOutput = lo.ToPtr("failed to read compile output")
+		} else {
+			compileErr.Result.CompilerOutput = lo.ToPtr(string(bytes))
+		}
 		compileErr.Result.Remark = lo.ToPtr(compileRes.Error)
 		compileErr.Result.Conclusion = model.ConvertStatusToConclusion(compileRes.Status)
 		return compileErr, nil
@@ -154,15 +161,6 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 		// TODO: Score this subtask.
 
 		// TODO: Return opinion.
-
-		// for _, testcase := range subtask.TestCases {
-		// 	executeRes, err := w.judge.ExecuteFile(ctx, compileRes.ArtifactFileName, compileRes.ArtifactFileId, &worker.CachedFile{FileID: testcase.InputKey}, time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit))
-		// 	if err != nil {
-		// 		return false
-		// 	}
-		// 	// TODO: compare executeRes.Ouput
-
-		// }
 
 		return true
 	})

@@ -31,14 +31,11 @@ type Manager struct {
 	fs         *resource.FileStore // share with worker
 }
 
-type CompileOption struct {
-}
-
 type CompileRes struct {
 	Status         envexec.Status
 	ExitStatus     int
 	Error          string
-	Output         []byte
+	Output         io.Reader
 	TotalTime      time.Duration
 	TotalSpace     runner.Size
 	ArtifactFileId string
@@ -48,7 +45,7 @@ type ExecuteRes struct {
 	Status     envexec.Status
 	ExitStatus int
 	Error      string
-	Output     []byte
+	Output     io.Reader
 	TotalTime  time.Duration
 	TotalSpace runner.Size
 }
@@ -57,7 +54,7 @@ type JudgeRes struct {
 	Status     envexec.Status
 	ExitStatus int
 	Error      string
-	Output     []byte
+	Conclusion model.Conclusion
 	TotalTime  time.Duration
 	TotalSpace runner.Size
 }
@@ -147,7 +144,7 @@ func (m *Manager) Compile(ctx context.Context, p *model.Problem, sub *model.Subm
 		if err != nil {
 			return compileRes, errors.New("failed to reseek compile stdout")
 		}
-		compileRes.Output, err = io.ReadAll(res.Results[0].Files["stdout"])
+		compileRes.Output = res.Results[0].Files["stdout"]
 		if err != nil && err != io.EOF {
 			return compileRes, errors.New("failed to read compile stdout")
 		}
@@ -156,7 +153,7 @@ func (m *Manager) Compile(ctx context.Context, p *model.Problem, sub *model.Subm
 		if err != nil {
 			return compileRes, errors.New("failed to reseek compile stderr")
 		}
-		compileRes.Output, err = io.ReadAll(res.Results[0].Files["stderr"])
+		compileRes.Output = res.Results[0].Files["stderr"]
 		if err != nil && err != io.EOF {
 			return compileRes, errors.New("failed to read compile stderr")
 		}
@@ -212,7 +209,7 @@ func (m *Manager) ExecuteFile(ctx context.Context, fileID string, stdin worker.C
 		if err != nil {
 			return executeRes, errors.New("failed to reseek execute stdout: " + err.Error())
 		}
-		executeRes.Output, err = io.ReadAll(res.Results[0].Files["stdout"])
+		executeRes.Output = res.Results[0].Files["stdout"]
 		if err != nil && err != io.EOF {
 			return executeRes, errors.New("failed to read execute stdout: " + err.Error())
 		}
@@ -221,7 +218,7 @@ func (m *Manager) ExecuteFile(ctx context.Context, fileID string, stdin worker.C
 		if err != nil {
 			return executeRes, errors.New("failed to reseek execute stderr")
 		}
-		executeRes.Output, err = io.ReadAll(res.Results[0].Files["stderr"])
+		executeRes.Output = res.Results[0].Files["stderr"]
 		if err != nil && err != io.EOF {
 			return executeRes, errors.New("failed to read execute stderr")
 		}
@@ -230,24 +227,27 @@ func (m *Manager) ExecuteFile(ctx context.Context, fileID string, stdin worker.C
 	return executeRes, nil
 }
 
-// func (m *Manager) Judge(ctx context.Context, fileID string, testcase *model.TestCase, CPULimit time.Duration, memoryLimit runner.Size) {
-// 	executeRes, err := m.ExecuteFile(ctx, fileID, &worker.CachedFile{FileID: testcase.InputKey}, CPULimit, memoryLimit)
-// 	if err != nil {
-// 		return
-// 	}
+func (m *Manager) Judge(ctx context.Context, fileID string, subtask *model.Subtask, CPULimit time.Duration, memoryLimit runner.Size) {
 
-// 	_, f := m.fs.Get(testcase.OutputKey)
-// 	r, err := envexec.FileToReader(f)
-// 	if err != nil {
-// 		return
-// 	}
+	for _, testcase := range subtask.TestCases {
+		executeRes, err := m.ExecuteFile(ctx, fileID, &worker.CachedFile{FileID: testcase.InputKey}, CPULimit, memoryLimit)
+		if err != nil {
+			return
+		}
 
-// 	expectedOuput, err := io.ReadAll(r)
-// 	if err != nil {
-// 		return
-// 	}
+		_, f := m.fs.Get(testcase.OutputKey)
+		r, err := envexec.FileToReader(f)
+		if err != nil {
+			return
+		}
 
-// }
+		expectedOuput, err := io.ReadAll(r)
+		if err != nil {
+			return
+		}
+	}
+
+}
 
 func (m *Manager) ExecuteCommand(ctx context.Context, cmd string) string {
 	res := <-m.worker.Execute(ctx, &worker.Request{
