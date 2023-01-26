@@ -128,13 +128,11 @@ func TestMain(m *testing.M) {
 // 	t.Errorf("s: %+v, f: %+v", s, f)
 // }
 
-var compileResCaches map[string]CompileRes
 var fileCaches map[string]string
 
 func TestCompile(t *testing.T) {
 	p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
 	ctx := context.Background()
-	compileResCaches = make(map[string]CompileRes)
 	fileCaches = make(map[string]string)
 
 	for language, conf := range languageConfig {
@@ -154,12 +152,6 @@ func TestCompile(t *testing.T) {
 			if compileRes.ExitStatus != 0 {
 				t.Errorf("failed to finish compile: compileRes.Status != 0, compileRes: %+v", compileRes)
 			}
-
-			// _, ok := compileRes.ArtifactFileIDs[conf.ArtifactName]
-			// if !ok {
-			// 	t.Errorf("failed to finish compile: failed to cache fille, compileRes: %+v", compileRes)
-			// }
-			compileResCaches[language] = *compileRes
 			fileCaches[language] = compileRes.ArtifactFileId
 		})
 	}
@@ -189,7 +181,7 @@ func TestExecuteFile(t *testing.T) {
 			if executeRes.ExitStatus != 0 {
 				t.Errorf("failed to execute: executeRes.ExitStatus != 0, executeRes: %+v", executeRes)
 			}
-			assert.Equal(t, stdout, executeRes.Output, fmt.Sprintf("compileRes: %+v, executeRes: %+v", compileResCaches[language], executeRes))
+			assert.Equal(t, stdout, executeRes.Output, fmt.Sprintf("executeRes: %+v", executeRes))
 		})
 	}
 }

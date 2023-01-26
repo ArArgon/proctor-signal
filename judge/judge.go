@@ -28,21 +28,20 @@ func NewJudgeManager(worker worker.Worker) *Manager {
 type Manager struct {
 	worker     worker.Worker
 	resManager *resource.Manager
-	fs         *resource.FileStore
+	fs         *resource.FileStore // share with worker
 }
 
 type CompileOption struct {
 }
 
 type CompileRes struct {
-	Status           envexec.Status
-	ExitStatus       int
-	Error            string
-	Output           string
-	TotalTime        time.Duration
-	TotalSpace       runner.Size
-	ArtifactFileName string
-	ArtifactFileId   string
+	Status         envexec.Status
+	ExitStatus     int
+	Error          string
+	Output         string
+	TotalTime      time.Duration
+	TotalSpace     runner.Size
+	ArtifactFileId string
 }
 
 type ExecuteRes struct {
@@ -84,7 +83,7 @@ func LoadLanguageConfig(configPath string) {
 	}
 }
 
-func (m *Manager) RemoveFiles(fileIDs map[string]string) {
+func (m *Manager) RemoveFiles(fileIDs []string) {
 	for _, v := range fileIDs {
 		m.fs.Remove(v)
 	}
@@ -123,12 +122,11 @@ func (m *Manager) Compile(ctx context.Context, p *model.Problem, sub *model.Subm
 	})
 
 	compileRes := &CompileRes{
-		Status:           res.Results[0].Status,
-		ExitStatus:       res.Results[0].ExitStatus,
-		Error:            res.Results[0].Error,
-		TotalTime:        res.Results[0].RunTime,
-		TotalSpace:       res.Results[0].Memory,
-		ArtifactFileName: compileConf.ArtifactName,
+		Status:     res.Results[0].Status,
+		ExitStatus: res.Results[0].ExitStatus,
+		Error:      res.Results[0].Error,
+		TotalTime:  res.Results[0].RunTime,
+		TotalSpace: res.Results[0].Memory,
 	}
 
 	compileRes.ArtifactFileId, ok = res.Results[0].FileIDs[compileConf.ArtifactName]
