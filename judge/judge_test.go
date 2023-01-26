@@ -72,7 +72,7 @@ func TestWokerExecute(t *testing.T) {
 	res := <-judgeManger.worker.Execute(ctx, &worker.Request{
 		Cmd: []worker.Cmd{{
 			Env:         []string{"PATH=/usr/bin:/bin"},
-			Args:        []string{"mkdir", "tmp.txt"},
+			Args:        []string{"cat", "114514"},
 			CPULimit:    time.Second,
 			MemoryLimit: 104857600,
 			ProcLimit:   50,
@@ -80,6 +80,9 @@ func TestWokerExecute(t *testing.T) {
 				&worker.MemoryFile{Content: []byte("")},
 				&worker.Collector{Name: "stdout", Max: 10240},
 				&worker.Collector{Name: "stderr", Max: 10240},
+			},
+			CopyIn: map[string]worker.CmdFile{
+				"tmp.txt": &worker.MemoryFile{Content: []byte("114514")},
 			},
 			CopyOut: []worker.CmdCopyOutFile{
 				{Name: "stdout", Optional: true},
@@ -115,11 +118,11 @@ func TestWokerExecute(t *testing.T) {
 		assert.NoError(t, err, "failed to read execute stderr: ")
 	}
 	executeRes.Output = string(executeOutput)
-	// assert.Equal(t, "114", executeRes.Output, executeRes)
+	assert.Equal(t, "114", executeRes.Output, executeRes)
 
 	id, ok := res.Results[0].FileIDs["tmp.txt"]
 	if !ok {
-		t.Errorf("failed to finish compile: failed to cache fille, executeRes: %+v", executeRes)
+		t.Errorf("failed to finish execute: failed to cache file, executeRes: %+v", executeRes)
 	}
 
 	s, f := judgeManger.fs.Get(id)
