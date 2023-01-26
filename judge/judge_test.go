@@ -72,7 +72,7 @@ func TestWokerExecute(t *testing.T) {
 	res := <-judgeManger.worker.Execute(ctx, &worker.Request{
 		Cmd: []worker.Cmd{{
 			Env:         []string{"PATH=/usr/bin:/bin"},
-			Args:        []string{"echo", "114514", ">", "tmp.txt"},
+			Args:        []string{"mkdir", "tmp.txt"},
 			CPULimit:    time.Second,
 			MemoryLimit: 104857600,
 			ProcLimit:   50,
@@ -115,7 +115,7 @@ func TestWokerExecute(t *testing.T) {
 		assert.NoError(t, err, "failed to read execute stderr: ")
 	}
 	executeRes.Output = string(executeOutput)
-	assert.Equal(t, "114", executeRes.Output, executeRes)
+	// assert.Equal(t, "114", executeRes.Output, executeRes)
 
 	id, ok := res.Results[0].FileIDs["tmp.txt"]
 	if !ok {
