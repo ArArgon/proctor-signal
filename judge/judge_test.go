@@ -169,10 +169,8 @@ func TestExecuteFile(t *testing.T) {
 			continue
 		}
 
-		name, _ := judgeManger.fs.Get(fileCaches[language])
-
 		t.Run(language, func(t *testing.T) {
-			executeRes, err := judgeManger.ExecuteFile(ctx, name,
+			executeRes, err := judgeManger.ExecuteFile(ctx,
 				fileCaches[language],
 				&worker.MemoryFile{Content: []byte(stdin)},
 				time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit),

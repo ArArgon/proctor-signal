@@ -38,7 +38,7 @@ type CompileRes struct {
 	Status         envexec.Status
 	ExitStatus     int
 	Error          string
-	Output         string
+	Output         []byte
 	TotalTime      time.Duration
 	TotalSpace     runner.Size
 	ArtifactFileId string
@@ -48,7 +48,7 @@ type ExecuteRes struct {
 	Status     envexec.Status
 	ExitStatus int
 	Error      string
-	Output     string
+	Output     []byte
 	TotalTime  time.Duration
 	TotalSpace runner.Size
 }
@@ -57,7 +57,9 @@ type JudgeRes struct {
 	Status     envexec.Status
 	ExitStatus int
 	Error      string
-	Output     string
+	Output     []byte
+	TotalTime  time.Duration
+	TotalSpace runner.Size
 }
 
 var languageConfig map[string]struct {
@@ -139,14 +141,13 @@ func (m *Manager) Compile(ctx context.Context, p *model.Problem, sub *model.Subm
 	}
 
 	// read compile output
-	var compileOutput []byte
 	var err error
 	if res.Results[0].ExitStatus == 0 {
 		_, err = res.Results[0].Files["stdout"].Seek(0, 0)
 		if err != nil {
 			return compileRes, errors.New("failed to reseek compile stdout")
 		}
-		compileOutput, err = io.ReadAll(res.Results[0].Files["stdout"])
+		compileRes.Output, err = io.ReadAll(res.Results[0].Files["stdout"])
 		if err != nil && err != io.EOF {
 			return compileRes, errors.New("failed to read compile stdout")
 		}
@@ -155,22 +156,26 @@ func (m *Manager) Compile(ctx context.Context, p *model.Problem, sub *model.Subm
 		if err != nil {
 			return compileRes, errors.New("failed to reseek compile stderr")
 		}
-		compileOutput, err = io.ReadAll(res.Results[0].Files["stderr"])
+		compileRes.Output, err = io.ReadAll(res.Results[0].Files["stderr"])
 		if err != nil && err != io.EOF {
 			return compileRes, errors.New("failed to read compile stderr")
 		}
 	}
-	compileRes.Output = string(compileOutput)
 
 	return compileRes, nil
 }
 
 // ExecuteFile execute a runnable file with stdin.
-func (m *Manager) ExecuteFile(ctx context.Context, fileName, fileID string, stdin worker.CmdFile, CPULimit time.Duration, memoryLimit runner.Size) (*ExecuteRes, error) {
+func (m *Manager) ExecuteFile(ctx context.Context, fileID string, stdin worker.CmdFile, CPULimit time.Duration, memoryLimit runner.Size) (*ExecuteRes, error) {
+	name, _ := m.fs.Get(fileID)
+	if name == "" {
+		return nil, errors.New("failed to get runnable file with id: " + fileID)
+	}
+
 	res := <-m.worker.Execute(ctx, &worker.Request{
 		Cmd: []worker.Cmd{{
 			Env:         []string{"PATH=/usr/bin:/bin"},
-			Args:        []string{fileName},
+			Args:        []string{name},
 			CPULimit:    CPULimit,
 			MemoryLimit: memoryLimit,
 			ProcLimit:   50,
@@ -180,7 +185,7 @@ func (m *Manager) ExecuteFile(ctx context.Context, fileName, fileID string, stdi
 				&worker.Collector{Name: "stderr", Max: 10240},
 			},
 			CopyIn: map[string]worker.CmdFile{
-				fileName: &worker.CachedFile{FileID: fileID},
+				name: &worker.CachedFile{FileID: fileID},
 			},
 			CopyOut: []worker.CmdCopyOutFile{
 				{Name: "stdout", Optional: true},
@@ -201,14 +206,13 @@ func (m *Manager) ExecuteFile(ctx context.Context, fileName, fileID string, stdi
 	}
 
 	// read execute output
-	var executeOutput []byte
 	var err error
 	if res.Results[0].ExitStatus == 0 {
 		_, err = res.Results[0].Files["stdout"].Seek(0, 0)
 		if err != nil {
 			return executeRes, errors.New("failed to reseek execute stdout: " + err.Error())
 		}
-		executeOutput, err = io.ReadAll(res.Results[0].Files["stdout"])
+		executeRes.Output, err = io.ReadAll(res.Results[0].Files["stdout"])
 		if err != nil && err != io.EOF {
 			return executeRes, errors.New("failed to read execute stdout: " + err.Error())
 		}
@@ -217,36 +221,32 @@ func (m *Manager) ExecuteFile(ctx context.Context, fileName, fileID string, stdi
 		if err != nil {
 			return executeRes, errors.New("failed to reseek execute stderr")
 		}
-		executeOutput, err = io.ReadAll(res.Results[0].Files["stderr"])
+		executeRes.Output, err = io.ReadAll(res.Results[0].Files["stderr"])
 		if err != nil && err != io.EOF {
 			return executeRes, errors.New("failed to read execute stderr")
 		}
 	}
-	executeRes.Output = string(executeOutput)
 
 	return executeRes, nil
 }
 
-// func (m *Manager) Judge(ctx context.Context, ArtifactFileName, artifactFileID string, subtask *model.Subtask, p *model.Problem) (*JudgeRes, error) {
-// 	conf, ok := languageConfig[language]
-// 	if !ok {
-// 		return nil, fmt.Errorf("compile config for %s not found", language)
+// func (m *Manager) Judge(ctx context.Context, fileID string, testcase *model.TestCase, CPULimit time.Duration, memoryLimit runner.Size) {
+// 	executeRes, err := m.ExecuteFile(ctx, fileID, &worker.CachedFile{FileID: testcase.InputKey}, CPULimit, memoryLimit)
+// 	if err != nil {
+// 		return
 // 	}
 
-// 	fileName := conf.ArtifactName
-// 	fileID := artifactFileIDs[fileName]
-// 	for _, testcase := range subtask.TestCases {
-// 		executeRes, err := m.ExecuteFile(ctx, fileName, fileID, &worker.CachedFile{FileID: testcase.InputKey}, p.)
-// 		if err != nil {
-// 			return nil, err
-// 		}
-
-// 		_, f := m.fs.Get(testcase.OutputKey)
-// 		f
-
+// 	_, f := m.fs.Get(testcase.OutputKey)
+// 	r, err := envexec.FileToReader(f)
+// 	if err != nil {
+// 		return
 // 	}
 
-// 	return nil, nil
+// 	expectedOuput, err := io.ReadAll(r)
+// 	if err != nil {
+// 		return
+// 	}
+
 // }
 
 func (m *Manager) ExecuteCommand(ctx context.Context, cmd string) string {
