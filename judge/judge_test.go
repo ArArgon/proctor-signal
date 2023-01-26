@@ -135,6 +135,7 @@ func TestCompile(t *testing.T) {
 	p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
 	ctx := context.Background()
 	compileResCaches = make(map[string]CompileRes)
+	fileCaches = make(map[string]string)
 
 	for language, conf := range languageConfig {
 		// just for C
