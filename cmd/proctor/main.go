@@ -100,7 +100,9 @@ func main() {
 	ctx, cancel = context.WithTimeout(context.TODO(), time.Second*3)
 	defer cancel()
 
-	backendCli.ReportExit(ctx, "exiting")
+	if err := backendCli.ReportExit(ctx, "exiting"); err != nil {
+		sugar.With("err", err).Warn("failed to exit gracefully")
+	}
 	var eg errgroup.Group
 	for _, s := range stops {
 		s := s

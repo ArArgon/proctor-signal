@@ -32,7 +32,7 @@ type Client interface {
 	PutResourceStream(ctx context.Context, resourceType ResourceType, size int64, body io.ReadCloser) (string, error)
 
 	// ReportExit informs the backend of the exit of this executor instance.
-	ReportExit(ctx context.Context, reason string)
+	ReportExit(ctx context.Context, reason string) error
 }
 
 type client struct {
@@ -176,6 +176,13 @@ func (c *client) PutResourceStream(
 	return *respBody.Key, nil
 }
 
-func (c *client) ReportExit(ctx context.Context, reason string) {
-	c.auth.gracefulExit(ctx, reason)
+func (c *client) ReportExit(ctx context.Context, reason string) error {
+	_, err := c.GracefulExit(ctx, &GracefulExitRequest{
+		Reason:     reason,
+		InstanceId: c.auth.instanceID,
+	})
+	if err != nil {
+		return errors.WithMessage(err, "failed to inform the backend server")
+	}
+	return nil
 }

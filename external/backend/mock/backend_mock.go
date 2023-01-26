@@ -153,6 +153,26 @@ func (mr *MockClientMockRecorder) GetResourceStream(arg0, arg1, arg2 interface{}
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetResourceStream", reflect.TypeOf((*MockClient)(nil).GetResourceStream), arg0, arg1, arg2)
 }
 
+// GracefulExit mocks base method.
+func (m *MockClient) GracefulExit(arg0 context.Context, arg1 *backend.GracefulExitRequest, arg2 ...grpc.CallOption) (*backend.GracefulExitResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GracefulExit", varargs...)
+	ret0, _ := ret[0].(*backend.GracefulExitResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GracefulExit indicates an expected call of GracefulExit.
+func (mr *MockClientMockRecorder) GracefulExit(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GracefulExit", reflect.TypeOf((*MockClient)(nil).GracefulExit), varargs...)
+}
+
 // PutResource mocks base method.
 func (m *MockClient) PutResource(arg0 context.Context, arg1 *backend.PutResourceRequest, arg2 ...grpc.CallOption) (*backend.PutResourceResponse, error) {
 	m.ctrl.T.Helper()
@@ -209,9 +229,11 @@ func (mr *MockClientMockRecorder) PutResourceStream(arg0, arg1, arg2, arg3 inter
 }
 
 // ReportExit mocks base method.
-func (m *MockClient) ReportExit(arg0 context.Context, arg1 string) {
+func (m *MockClient) ReportExit(arg0 context.Context, arg1 string) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ReportExit", arg0, arg1)
+	ret := m.ctrl.Call(m, "ReportExit", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // ReportExit indicates an expected call of ReportExit.

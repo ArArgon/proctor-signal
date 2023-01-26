@@ -24,7 +24,6 @@ const _ = grpc.SupportPackageIsVersion7
 type AuthServiceClient interface {
 	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error)
 	RenewToken(ctx context.Context, in *RenewTokenRequest, opts ...grpc.CallOption) (*RenewTokenResponse, error)
-	GracefulExit(ctx context.Context, in *GracefulExitRequest, opts ...grpc.CallOption) (*GracefulExitResponse, error)
 }
 
 type authServiceClient struct {
@@ -53,22 +52,12 @@ func (c *authServiceClient) RenewToken(ctx context.Context, in *RenewTokenReques
 	return out, nil
 }
 
-func (c *authServiceClient) GracefulExit(ctx context.Context, in *GracefulExitRequest, opts ...grpc.CallOption) (*GracefulExitResponse, error) {
-	out := new(GracefulExitResponse)
-	err := c.cc.Invoke(ctx, "/signal.backend.AuthService/GracefulExit", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // AuthServiceServer is the server API for AuthService service.
 // All implementations must embed UnimplementedAuthServiceServer
 // for forward compatibility
 type AuthServiceServer interface {
 	Register(context.Context, *RegisterRequest) (*RegisterResponse, error)
 	RenewToken(context.Context, *RenewTokenRequest) (*RenewTokenResponse, error)
-	GracefulExit(context.Context, *GracefulExitRequest) (*GracefulExitResponse, error)
 	mustEmbedUnimplementedAuthServiceServer()
 }
 
@@ -81,9 +70,6 @@ func (UnimplementedAuthServiceServer) Register(context.Context, *RegisterRequest
 }
 func (UnimplementedAuthServiceServer) RenewToken(context.Context, *RenewTokenRequest) (*RenewTokenResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RenewToken not implemented")
-}
-func (UnimplementedAuthServiceServer) GracefulExit(context.Context, *GracefulExitRequest) (*GracefulExitResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GracefulExit not implemented")
 }
 func (UnimplementedAuthServiceServer) mustEmbedUnimplementedAuthServiceServer() {}
 
@@ -134,24 +120,6 @@ func _AuthService_RenewToken_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AuthService_GracefulExit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GracefulExitRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AuthServiceServer).GracefulExit(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/signal.backend.AuthService/GracefulExit",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthServiceServer).GracefulExit(ctx, req.(*GracefulExitRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // AuthService_ServiceDesc is the grpc.ServiceDesc for AuthService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -167,10 +135,6 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "RenewToken",
 			Handler:    _AuthService_RenewToken_Handler,
 		},
-		{
-			MethodName: "GracefulExit",
-			Handler:    _AuthService_GracefulExit_Handler,
-		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "backend.proto",
@@ -180,13 +144,17 @@ var AuthService_ServiceDesc = grpc.ServiceDesc{
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type BackendServiceClient interface {
+	// Problem Service
 	GetProblem(ctx context.Context, in *GetProblemRequest, opts ...grpc.CallOption) (*GetProblemResponse, error)
 	FetchJudgeTask(ctx context.Context, in *FetchJudgeTaskRequest, opts ...grpc.CallOption) (*FetchJudgeTaskResponse, error)
 	CompleteJudgeTask(ctx context.Context, in *CompleteJudgeTaskRequest, opts ...grpc.CallOption) (*CompleteJudgeTaskResponse, error)
+	// Resource Service
 	PutResource(ctx context.Context, in *PutResourceRequest, opts ...grpc.CallOption) (*PutResourceResponse, error)
 	PutResourceBatch(ctx context.Context, in *PutResourceBatchRequest, opts ...grpc.CallOption) (*PutResourceBatchResponse, error)
 	GetResource(ctx context.Context, in *GetResourceRequest, opts ...grpc.CallOption) (*GetResourceResponse, error)
 	GetResourceBatch(ctx context.Context, in *GetResourceBatchRequest, opts ...grpc.CallOption) (*GetResourceBatchResponse, error)
+	// Misc
+	GracefulExit(ctx context.Context, in *GracefulExitRequest, opts ...grpc.CallOption) (*GracefulExitResponse, error)
 }
 
 type backendServiceClient struct {
@@ -260,17 +228,30 @@ func (c *backendServiceClient) GetResourceBatch(ctx context.Context, in *GetReso
 	return out, nil
 }
 
+func (c *backendServiceClient) GracefulExit(ctx context.Context, in *GracefulExitRequest, opts ...grpc.CallOption) (*GracefulExitResponse, error) {
+	out := new(GracefulExitResponse)
+	err := c.cc.Invoke(ctx, "/signal.backend.BackendService/GracefulExit", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BackendServiceServer is the server API for BackendService service.
 // All implementations must embed UnimplementedBackendServiceServer
 // for forward compatibility
 type BackendServiceServer interface {
+	// Problem Service
 	GetProblem(context.Context, *GetProblemRequest) (*GetProblemResponse, error)
 	FetchJudgeTask(context.Context, *FetchJudgeTaskRequest) (*FetchJudgeTaskResponse, error)
 	CompleteJudgeTask(context.Context, *CompleteJudgeTaskRequest) (*CompleteJudgeTaskResponse, error)
+	// Resource Service
 	PutResource(context.Context, *PutResourceRequest) (*PutResourceResponse, error)
 	PutResourceBatch(context.Context, *PutResourceBatchRequest) (*PutResourceBatchResponse, error)
 	GetResource(context.Context, *GetResourceRequest) (*GetResourceResponse, error)
 	GetResourceBatch(context.Context, *GetResourceBatchRequest) (*GetResourceBatchResponse, error)
+	// Misc
+	GracefulExit(context.Context, *GracefulExitRequest) (*GracefulExitResponse, error)
 	mustEmbedUnimplementedBackendServiceServer()
 }
 
@@ -298,6 +279,9 @@ func (UnimplementedBackendServiceServer) GetResource(context.Context, *GetResour
 }
 func (UnimplementedBackendServiceServer) GetResourceBatch(context.Context, *GetResourceBatchRequest) (*GetResourceBatchResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetResourceBatch not implemented")
+}
+func (UnimplementedBackendServiceServer) GracefulExit(context.Context, *GracefulExitRequest) (*GracefulExitResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GracefulExit not implemented")
 }
 func (UnimplementedBackendServiceServer) mustEmbedUnimplementedBackendServiceServer() {}
 
@@ -438,6 +422,24 @@ func _BackendService_GetResourceBatch_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BackendService_GracefulExit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GracefulExitRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BackendServiceServer).GracefulExit(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/signal.backend.BackendService/GracefulExit",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BackendServiceServer).GracefulExit(ctx, req.(*GracefulExitRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BackendService_ServiceDesc is the grpc.ServiceDesc for BackendService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -472,6 +474,10 @@ var BackendService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetResourceBatch",
 			Handler:    _BackendService_GetResourceBatch_Handler,
+		},
+		{
+			MethodName: "GracefulExit",
+			Handler:    _BackendService_GracefulExit_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -8,7 +8,9 @@ package signal.backend;
 message RegisterRequest {
   string secret = 1;
   string version = 2;
+  string ip_address = 3;
   // other metadata
+  repeated string supported_languages = 20;
 }
 
 message RegisterResponse {
@@ -29,14 +31,4 @@ message RenewTokenResponse {
   int32 status_code = 1;
   optional string reason = 2;
   optional string token = 3;
-}
-
-message GracefulExitRequest {
-  string reason = 1;
-  string instance_id = 2;
-}
-
-message GracefulExitResponse {
-  int32 status_code = 1;
-  optional string reason = 2;
 }

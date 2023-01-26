@@ -211,16 +211,3 @@ func (a *authManager) RoundTrip(request *http.Request) (*http.Response, error) {
 	a.mut.RUnlock()
 	return a.transport.RoundTrip(request)
 }
-
-func (a *authManager) gracefulExit(ctx context.Context, reason string) {
-	sugar := a.logger.Sugar().With("exit_reason", reason)
-	resp, err := a.cli.GracefulExit(ctx, &GracefulExitRequest{
-		Reason:     reason,
-		InstanceId: a.instanceID,
-	})
-	if err != nil {
-		sugar.With("err", err).Warn("failed to inform the auth server")
-		return
-	}
-	sugar.Info("exit resp from server: ", resp)
-}
