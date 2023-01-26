@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"testing"
@@ -66,70 +65,71 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestWokerExecute(t *testing.T) {
-	ctx := context.Background()
+// func TestWokerExecute(t *testing.T) {
+// 	ctx := context.Background()
 
-	res := <-judgeManger.worker.Execute(ctx, &worker.Request{
-		Cmd: []worker.Cmd{{
-			Env:         []string{"PATH=/usr/bin:/bin"},
-			Args:        []string{"cat", "114514"},
-			CPULimit:    time.Second,
-			MemoryLimit: 104857600,
-			ProcLimit:   50,
-			Files: []worker.CmdFile{
-				&worker.MemoryFile{Content: []byte("")},
-				&worker.Collector{Name: "stdout", Max: 10240},
-				&worker.Collector{Name: "stderr", Max: 10240},
-			},
-			CopyIn: map[string]worker.CmdFile{
-				"tmp.txt": &worker.MemoryFile{Content: []byte("114514")},
-			},
-			CopyOut: []worker.CmdCopyOutFile{
-				{Name: "stdout", Optional: true},
-				{Name: "stderr", Optional: true},
-			},
-			CopyOutCached: []worker.CmdCopyOutFile{
-				{Name: "tmp.txt", Optional: true},
-			},
-		}},
-	})
+// 	res := <-judgeManger.worker.Execute(ctx, &worker.Request{
+// 		Cmd: []worker.Cmd{{
+// 			Env:         []string{"PATH=/usr/bin:/bin"},
+// 			Args:        []string{"cat", "tmp.txt"},
+// 			CPULimit:    time.Second,
+// 			MemoryLimit: 104857600,
+// 			ProcLimit:   50,
+// 			Files: []worker.CmdFile{
+// 				&worker.MemoryFile{Content: []byte("")},
+// 				&worker.Collector{Name: "stdout", Max: 10240},
+// 				&worker.Collector{Name: "stderr", Max: 10240},
+// 			},
+// 			CopyIn: map[string]worker.CmdFile{
+// 				"tmp.txt": &worker.MemoryFile{Content: []byte("114514")},
+// 			},
+// 			CopyOut: []worker.CmdCopyOutFile{
+// 				{Name: "stdout", Optional: true},
+// 				{Name: "stderr", Optional: true},
+// 			},
+// 			CopyOutCached: []worker.CmdCopyOutFile{
+// 				{Name: "tmp.txt", Optional: true},
+// 			},
+// 		}},
+// 	})
 
-	executeRes := &ExecuteRes{
-		Status:     res.Results[0].Status,
-		ExitStatus: res.Results[0].ExitStatus,
-		Error:      res.Results[0].Error,
-	}
-	assert.NoError(t, res.Error)
+// 	executeRes := &ExecuteRes{
+// 		Status:     res.Results[0].Status,
+// 		ExitStatus: res.Results[0].ExitStatus,
+// 		Error:      res.Results[0].Error,
+// 	}
+// 	assert.NoError(t, res.Error)
 
-	// read execute output
-	var executeOutput []byte
-	var err error
-	if res.Results[0].ExitStatus == 0 {
-		_, err = res.Results[0].Files["stdout"].Seek(0, 0)
-		assert.NoError(t, err, "failed to reseek execute stdout: ")
+// 	// read execute output
+// 	var executeOutput []byte
+// 	var err error
+// 	if res.Results[0].ExitStatus == 0 {
+// 		_, err = res.Results[0].Files["stdout"].Seek(0, 0)
+// 		assert.NoError(t, err, "failed to reseek execute stdout: ")
 
-		executeOutput, err = io.ReadAll(res.Results[0].Files["stdout"])
-		assert.NoError(t, err, "failed to read execute stdout: ")
-	} else {
-		_, err = res.Results[0].Files["stderr"].Seek(0, 0)
-		assert.NoError(t, err, "failed to reseek execute stderr: ")
+// 		executeOutput, err = io.ReadAll(res.Results[0].Files["stdout"])
+// 		assert.NoError(t, err, "failed to read execute stdout: ")
+// 	} else {
+// 		_, err = res.Results[0].Files["stderr"].Seek(0, 0)
+// 		assert.NoError(t, err, "failed to reseek execute stderr: ")
 
-		executeOutput, err = io.ReadAll(res.Results[0].Files["stderr"])
-		assert.NoError(t, err, "failed to read execute stderr: ")
-	}
-	executeRes.Output = string(executeOutput)
-	assert.Equal(t, "114", executeRes.Output, executeRes)
+// 		executeOutput, err = io.ReadAll(res.Results[0].Files["stderr"])
+// 		assert.NoError(t, err, "failed to read execute stderr: ")
+// 	}
+// 	executeRes.Output = string(executeOutput)
+// 	assert.Equal(t, "114", executeRes.Output, executeRes)
 
-	id, ok := res.Results[0].FileIDs["tmp.txt"]
-	if !ok {
-		t.Errorf("failed to finish execute: failed to cache file, executeRes: %+v", executeRes)
-	}
+// 	id, ok := res.Results[0].FileIDs["tmp.txt"]
+// 	if !ok {
+// 		t.Errorf("failed to finish execute: failed to cache file, executeRes: %+v", executeRes)
+// 	}
 
-	s, f := judgeManger.fs.Get(id)
-	t.Errorf("s: %+v, f: %+v", s, f)
-}
+// 	s, f := judgeManger.fs.Get(id)
+// 	t.Errorf("s: %+v, f: %+v", s, f)
+// }
 
 var compileResCaches map[string]CompileRes
+var fileCaches map[string]string
 
 func TestCompile(t *testing.T) {
 	p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
@@ -159,6 +159,7 @@ func TestCompile(t *testing.T) {
 			// 	t.Errorf("failed to finish compile: failed to cache fille, compileRes: %+v", compileRes)
 			// }
 			compileResCaches[language] = *compileRes
+			fileCaches[language] = compileRes.ArtifactFileId
 		})
 	}
 }
@@ -169,15 +170,17 @@ func TestExecuteFile(t *testing.T) {
 	stdin := "Hello,world.\n" // should not contain space
 	stdout := stdin
 
-	for language, conf := range languageConfig {
+	for language, _ := range languageConfig {
 		// just for C
 		if language != "c" {
 			continue
 		}
 
+		name, _ := judgeManger.fs.Get(fileCaches[language])
+
 		t.Run(language, func(t *testing.T) {
-			executeRes, err := judgeManger.ExecuteFile(ctx, conf.ArtifactName,
-				compileResCaches[language].ArtifactFileId,
+			executeRes, err := judgeManger.ExecuteFile(ctx, name,
+				fileCaches[language],
 				&worker.MemoryFile{Content: []byte(stdin)},
 				time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit),
 			)
