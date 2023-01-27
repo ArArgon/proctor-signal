@@ -2,7 +2,6 @@ package backend
 
 import (
 	"context"
-	"crypto/dsa"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rsa"
@@ -125,14 +124,12 @@ func (a *authManager) parsePublicKey(pubKey string) error {
 	switch pub := pub.(type) {
 	case *rsa.PublicKey:
 		sugar.Info("server public key is RSA:", pub)
-	case *dsa.PublicKey:
-		sugar.Info("server public key is DSA:", pub)
 	case *ecdsa.PublicKey:
 		sugar.Info("server public key is ECDSA:", pub)
 	case ed25519.PublicKey:
 		sugar.Info("server public key is Ed25519:", pub)
 	default:
-		return errors.Errorf("unknown type of public key: %+v", pub)
+		return errors.Errorf("unsupported type of public key: %T", pub)
 	}
 	a.serverPublicKey = pub
 
