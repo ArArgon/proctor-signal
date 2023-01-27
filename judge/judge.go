@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
 	"strings"
 	"time"
 
@@ -54,7 +55,7 @@ type JudgeRes struct {
 	Status     envexec.Status
 	ExitStatus int
 	Error      string
-	Conclusion model.Conclusion
+	IsCorrect  bool
 	TotalTime  time.Duration
 	TotalSpace runner.Size
 }
@@ -227,26 +228,65 @@ func (m *Manager) ExecuteFile(ctx context.Context, fileID string, stdin worker.C
 	return executeRes, nil
 }
 
-func (m *Manager) Judge(ctx context.Context, fileID string, subtask *model.Subtask, CPULimit time.Duration, memoryLimit runner.Size) {
+func (m *Manager) Judge(ctx context.Context, fileID string, testcase *model.TestCase, CPULimit time.Duration, memoryLimit runner.Size) (*JudgeRes, error) {
+	executeRes, err := m.ExecuteFile(ctx, fileID, &worker.CachedFile{FileID: testcase.InputKey}, CPULimit, memoryLimit)
+	if err != nil {
+		return nil, err
+	}
 
-	for _, testcase := range subtask.TestCases {
-		executeRes, err := m.ExecuteFile(ctx, fileID, &worker.CachedFile{FileID: testcase.InputKey}, CPULimit, memoryLimit)
-		if err != nil {
-			return
+	judgeRes := &JudgeRes{
+		Status:     executeRes.Status,
+		ExitStatus: executeRes.ExitStatus,
+		Error:      executeRes.Error,
+		TotalTime:  executeRes.TotalTime,
+		TotalSpace: executeRes.TotalSpace,
+	}
+
+	_, f := m.fs.Get(testcase.OutputKey)
+	expectedOutputReader, err := envexec.FileToReader(f)
+	if err != nil {
+		return judgeRes, err
+	}
+
+	buffLen := 1024
+	executeOutputBuff := make([]byte, buffLen)
+	expectedOutputBuff := make([]byte, buffLen)
+	var expectLen, actualLen int
+	judgeRes.IsCorrect = true
+	for {
+		expectLen, err = io.ReadFull(expectedOutputReader, expectedOutputBuff)
+		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+			judgeRes.IsCorrect = false
+			return judgeRes, err
 		}
 
-		_, f := m.fs.Get(testcase.OutputKey)
-		r, err := envexec.FileToReader(f)
-		if err != nil {
-			return
+		actualLen, err = io.ReadFull(executeRes.Output, executeOutputBuff)
+		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+			judgeRes.IsCorrect = false
+			return judgeRes, err
 		}
 
-		expectedOuput, err := io.ReadAll(r)
-		if err != nil {
-			return
+		if actualLen == expectLen+1 {
+			if executeOutputBuff[actualLen-1] == ' ' || executeOutputBuff[actualLen-1] == '\n' {
+				// cut off ' ' or '\n' at the end of executeOutputBuff
+				actualLen--
+			} else {
+				judgeRes.IsCorrect = false
+			}
+		} else if actualLen > expectLen+1 || actualLen < expectLen {
+			judgeRes.IsCorrect = false
+		}
+
+		if !reflect.DeepEqual(expectedOutputBuff[:expectLen], executeOutputBuff[:actualLen]) {
+			judgeRes.IsCorrect = false
+		}
+
+		if expectLen < buffLen || !judgeRes.IsCorrect {
+			break
 		}
 	}
 
+	return judgeRes, nil
 }
 
 func (m *Manager) ExecuteCommand(ctx context.Context, cmd string) string {
