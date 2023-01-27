@@ -27,7 +27,7 @@ type Worker struct {
 }
 
 const maxTimeout = time.Minute * 10
-const backoffInterval = time.Millisecond * 200
+const backoffInterval = time.Millisecond * 500
 
 func NewWorker(
 	judgeManager *judge.Manager, resManager *resource.Manager, backendCli backend.BackendServiceClient,

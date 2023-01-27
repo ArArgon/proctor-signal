@@ -2,6 +2,12 @@ package backend
 
 import (
 	"context"
+	"crypto/dsa"
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"net/http"
 	"sync"
 	"time"
@@ -15,6 +21,7 @@ import (
 	"google.golang.org/grpc/metadata"
 
 	"proctor-signal/config"
+	"proctor-signal/utils"
 )
 
 const defaultRefreshTime = time.Minute * 5
@@ -26,10 +33,11 @@ type jwtClaim struct {
 }
 
 type authManager struct {
-	cli     AuthServiceClient
-	logger  *zap.Logger
-	version string
-	conf    *config.Config
+	cli             AuthServiceClient
+	logger          *zap.Logger
+	version         string
+	conf            *config.Config
+	serverPublicKey any
 
 	transport *http.Transport
 	mut       *sync.RWMutex
@@ -51,6 +59,12 @@ func newAuthManager(
 
 		transport: new(http.Transport),
 		mut:       new(sync.RWMutex),
+	}
+
+	if !conf.Backend.InsecureJwt {
+		if err := m.parsePublicKey(conf.Backend.JwtPubKey); err != nil {
+			return nil, errors.WithMessagef(err, "failed to parse public key")
+		}
 	}
 
 	if err := m.login(ctx); err != nil {
@@ -96,6 +110,35 @@ func (a *authManager) scheduleRefresh(ctx context.Context) {
 	}
 }
 
+func (a *authManager) parsePublicKey(pubKey string) error {
+	sugar := a.logger.Sugar()
+	block, _ := pem.Decode([]byte(pubKey))
+	if block == nil || block.Type != "PUBLIC KEY" {
+		return errors.New("invalid public key")
+	}
+
+	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		return errors.WithMessage(err, "failed to parse public key")
+	}
+
+	switch pub := pub.(type) {
+	case *rsa.PublicKey:
+		sugar.Info("server public key is RSA:", pub)
+	case *dsa.PublicKey:
+		sugar.Info("server public key is DSA:", pub)
+	case *ecdsa.PublicKey:
+		sugar.Info("server public key is ECDSA:", pub)
+	case ed25519.PublicKey:
+		sugar.Info("server public key is Ed25519:", pub)
+	default:
+		return errors.Errorf("unknown type of public key: %+v", pub)
+	}
+	a.serverPublicKey = pub
+
+	return nil
+}
+
 func (a *authManager) updateToken(accessToken string) error {
 	a.mut.Lock()
 	defer a.mut.Unlock()
@@ -108,10 +151,10 @@ func (a *authManager) updateToken(accessToken string) error {
 				"unmatched instanceID, expecting %s, got: %s", a.instanceID, claim.InstanceID,
 			)
 		}
-		return a.conf.Backend.JwtPubKey, nil
+		return lo.Ternary(a.conf.Backend.InsecureJwt, nil, a.serverPublicKey), nil
 	})
 
-	if err != nil && (a.conf.Backend.InsecureJwt && !errors.Is(err, jwt.ErrTokenSignatureInvalid)) {
+	if err != nil && (!a.conf.Backend.InsecureJwt && !errors.Is(err, jwt.ErrTokenSignatureInvalid)) {
 		return err
 	}
 
@@ -120,14 +163,16 @@ func (a *authManager) updateToken(accessToken string) error {
 	a.instanceID = c.InstanceID
 	a.noExpiration = c.ExpiresAt == nil || c.ExpiresAt.IsZero()
 	a.expireTime = lo.Ternary(a.noExpiration, c.ExpiresAt.Time, time.Time{})
+	a.accessToken = accessToken
 
 	return nil
 }
 
 func (a *authManager) login(ctx context.Context) error {
 	resp, err := a.cli.Register(ctx, &RegisterRequest{
-		Secret:  a.conf.Backend.AuthSecret,
-		Version: a.version,
+		Secret:    a.conf.Backend.AuthSecret,
+		Version:   a.version,
+		IpAddress: utils.GetLocalIP(),
 	})
 	if err != nil {
 		return err
@@ -169,7 +214,7 @@ func (a *authManager) refresh(ctx context.Context) error {
 }
 
 func (a *authManager) attachToken(ctx context.Context) context.Context {
-	return metadata.AppendToOutgoingContext(ctx, "authorization", a.accessToken)
+	return metadata.AppendToOutgoingContext(ctx, "Token", a.accessToken)
 }
 
 func (a *authManager) unaryInterceptor() grpc.UnaryClientInterceptor {
@@ -182,7 +227,7 @@ func (a *authManager) unaryInterceptor() grpc.UnaryClientInterceptor {
 		opts ...grpc.CallOption,
 	) error {
 		a.mut.RLock()
-		a.attachToken(ctx)
+		ctx = a.attachToken(ctx)
 		a.mut.RUnlock()
 		return invoker(ctx, method, req, reply, cc, opts...)
 	}
