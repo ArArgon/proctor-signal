@@ -2,12 +2,16 @@ c:
     SourceName: source.c
     ArtifactName: a.out
     CompileCmd: "/usr/bin/gcc source.c -o a.out"
+    CompileTimeLimit: 10000 # ms
+    CompileSpaceLimit: 1024 # MiB
     ExecuteCmd: "a.out"
 
 cpp:
     SourceName: source.cpp
     ArtifactName: a.out
     CompileCmd: "/usr/bin/g++ source.cpp -o a.out"
+    CompileTimeLimit: 10000 # ms
+    CompileSpaceLimit: 1024 # MiB
     ExecuteCmd: "a.out"
     Options:
         o2: "-O2"
@@ -17,6 +21,8 @@ java:
     SourceName: Source.java
     ArtifactName: Source.class
     CompileCmd: "/usr/bin/java Source.java"
+    CompileTimeLimit: 20000 # ms
+    CompileSpaceLimit: 2048 # MiB
     ExecuteCmd: "/usr/bin/java -jar Source.class"
 
 python:

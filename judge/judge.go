@@ -64,11 +64,13 @@ type JudgeRes struct {
 }
 
 var languageConfig map[string]struct {
-	SourceName   string            `yaml:"SourceName"`
-	ArtifactName string            `yaml:"ArtifactName"`
-	CompileCmd   string            `yaml:"CompileCmd"`
-	ExecuteCmd   string            `yaml:"ExecuteCmd"`
-	Options      map[string]string `yaml:"Options"`
+	SourceName        string            `yaml:"SourceName"`
+	ArtifactName      string            `yaml:"ArtifactName"`
+	CompileCmd        string            `yaml:"CompileCmd"`
+	CompileTimeLimit  uint32            `yaml:"CompileTimeLimit"`
+	CompileSpaceLimit uint64            `yaml:"CompileSpaceLimit"`
+	ExecuteCmd        string            `yaml:"ExecuteCmd"`
+	Options           map[string]string `yaml:"Options"`
 }
 
 func LoadLanguageConfig(configPath string) {
