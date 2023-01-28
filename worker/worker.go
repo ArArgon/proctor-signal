@@ -122,7 +122,7 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 			ReceiveTime:  timestamppb.New(receiveTime),
 		},
 	}
-	compileRes, err := w.judge.Compile(ctx, p, sub)
+	compileRes, err := w.judge.Compile(ctx, sub)
 	if compileRes == nil {
 		sugar.With("err", err).Error("failed to start compile")
 		compileErr.Result.Conclusion = model.Conclusion_Invalid

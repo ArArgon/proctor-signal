@@ -131,7 +131,7 @@ func TestMain(m *testing.M) {
 var fileCaches map[string]string
 
 func TestCompile(t *testing.T) {
-	p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
+	// p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
 	ctx := context.Background()
 	fileCaches = make(map[string]string)
 
@@ -146,7 +146,7 @@ func TestCompile(t *testing.T) {
 			assert.NoError(t, err)
 			sub := &model.Submission{Language: language, SourceCode: codes}
 
-			compileRes, err := judgeManger.Compile(ctx, p, sub)
+			compileRes, err := judgeManger.Compile(ctx, sub)
 			assert.NotNil(t, compileRes)
 			assert.NoError(t, err)
 			if compileRes.ExitStatus != 0 {

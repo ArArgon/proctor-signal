@@ -94,7 +94,7 @@ func (m *Manager) RemoveFiles(fileIDs []string) {
 	}
 }
 
-func (m *Manager) Compile(ctx context.Context, p *model.Problem, sub *model.Submission) (*CompileRes, error) {
+func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileRes, error) {
 	// TODO: compile options
 	compileConf, ok := languageConfig[sub.Language]
 	if !ok {
@@ -105,8 +105,8 @@ func (m *Manager) Compile(ctx context.Context, p *model.Problem, sub *model.Subm
 		Cmd: []worker.Cmd{{
 			Env:         []string{"PATH=/usr/bin:/bin", "SourceName=" + compileConf.SourceName, "ArtifactName=" + compileConf.ArtifactName},
 			Args:        strings.Split(compileConf.CompileCmd, " "),
-			CPULimit:    time.Duration(p.DefaultTimeLimit),
-			MemoryLimit: runner.Size(p.DefaultSpaceLimit),
+			CPULimit:    time.Duration(compileConf.CompileTimeLimit * 1000000),
+			MemoryLimit: runner.Size(compileConf.CompileSpaceLimit),
 			ProcLimit:   50,
 			Files: []worker.CmdFile{
 				&worker.MemoryFile{Content: []byte("")},
