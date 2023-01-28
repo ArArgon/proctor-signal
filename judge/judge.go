@@ -149,18 +149,12 @@ func (m *Manager) Compile(ctx context.Context, p *model.Problem, sub *model.Subm
 			return compileRes, errors.New("failed to reseek compile stdout")
 		}
 		compileRes.Output = res.Results[0].Files["stdout"]
-		if err != nil && err != io.EOF {
-			return compileRes, errors.New("failed to read compile stdout")
-		}
 	} else {
 		_, err = res.Results[0].Files["stderr"].Seek(0, 0)
 		if err != nil {
 			return compileRes, errors.New("failed to reseek compile stderr")
 		}
 		compileRes.Output = res.Results[0].Files["stderr"]
-		if err != nil && err != io.EOF {
-			return compileRes, errors.New("failed to read compile stderr")
-		}
 	}
 
 	return compileRes, nil
@@ -227,9 +221,6 @@ func (m *Manager) ExecuteFile(ctx context.Context, fileID string, stdin worker.C
 				return executeRes, errors.New("failed to reseek execute stdout: " + err.Error())
 			}
 			executeRes.Output = res.Results[0].Files["stdout"]
-			if err != nil && err != io.EOF {
-				return executeRes, errors.New("failed to read execute stdout: " + err.Error())
-			}
 		}
 	} else {
 		if cacheOutput {
@@ -243,9 +234,6 @@ func (m *Manager) ExecuteFile(ctx context.Context, fileID string, stdin worker.C
 				return executeRes, errors.New("failed to reseek execute stderr")
 			}
 			executeRes.Output = res.Results[0].Files["stderr"]
-			if err != nil && err != io.EOF {
-				return executeRes, errors.New("failed to read execute stderr")
-			}
 		}
 	}
 
