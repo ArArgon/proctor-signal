@@ -29,6 +29,12 @@ import (
 var judgeManger *Manager
 
 func TestMain(m *testing.M) {
+	// Init gojudge
+	err := container.Init()
+	if err != nil {
+		panic("faild to init container: " + err.Error())
+	}
+
 	// Init logger.
 	config := zap.NewDevelopmentConfig()
 	config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
@@ -45,12 +51,6 @@ func TestMain(m *testing.M) {
 
 	// Init fs.
 	fs := lo.Must(resource.NewFileStore(logger, loc))
-
-	// Init gojudge
-	err = container.Init()
-	if err != nil {
-		panic("faild to init container: " + err.Error())
-	}
 
 	conf := loadConf()
 	b := gojudge.NewEnvBuilder(conf)
