@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -107,12 +108,14 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 	}
 	sub := task.Task
 	receiveTime := time.Now()
-	internErr := &backend.CompleteJudgeTaskRequest{
-		Result: &model.JudgeResult{
-			Conclusion:  model.Conclusion_InternalError,
-			ReceiveTime: timestamppb.New(receiveTime),
-			Remark:      lo.ToPtr(err.Error()),
-		},
+	internErr := func(messages ...string) *backend.CompleteJudgeTaskRequest {
+		return &backend.CompleteJudgeTaskRequest{
+			Result: &model.JudgeResult{
+				Conclusion:  model.Conclusion_InternalError,
+				ReceiveTime: timestamppb.New(receiveTime),
+				ErrMessage:  lo.ToPtr(strings.Join(messages, " ")),
+			},
+		}
 	}
 
 	sugar = sugar.With(
@@ -127,7 +130,8 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 	p, unlock, err := w.resManager.HoldAndLock(ctx, sub.ProblemId, sub.ProblemVer)
 	if err != nil {
 		sugar.With("err", err).Error("failed to hold and lock problem")
-		return internErr, errors.WithMessagef(err, "failed to hold and lock problem")
+		return internErr("failed to hold and lock problem,", err.Error()),
+			errors.WithMessagef(err, "failed to hold and lock problem")
 	}
 	defer unlock()
 
@@ -143,14 +147,14 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 	if compileRes == nil {
 		sugar.With("err", err).Error("failed to start compile")
 		compileErr.Result.Conclusion = model.Conclusion_Invalid
-		compileErr.Result.Remark = lo.ToPtr(err.Error())
+		compileErr.Result.ErrMessage = lo.ToPtr(err.Error())
 		return compileErr, err
 	}
 	defer w.judge.RemoveFiles([]string{compileRes.ArtifactFileId})
 
 	if err != nil {
 		sugar.With("err", compileRes.Status.String()).Error("failed to finish compile")
-		return internErr, err
+		return internErr("failed to finish compilation,", err.Error()), err
 	}
 
 	if compileRes.ExitStatus != 0 {
@@ -162,7 +166,7 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 		} else {
 			compileErr.Result.CompilerOutput = lo.ToPtr(string(bytes))
 		}
-		compileErr.Result.Remark = lo.ToPtr(compileRes.Error)
+		compileErr.Result.ErrMessage = lo.ToPtr(compileRes.Error)
 		compileErr.Result.Conclusion = model.ConvertStatusToConclusion(compileRes.Status)
 		return compileErr, nil
 	}
