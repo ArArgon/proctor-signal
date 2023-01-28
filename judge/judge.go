@@ -264,6 +264,7 @@ func (m *Manager) Judge(ctx context.Context, fileID string, testcase *model.Test
 	_, f := m.fs.Get(testcase.OutputKey)
 	expectedOutputReader, err := envexec.FileToReader(f)
 	if err != nil {
+		judgeRes.Conclusion = model.Conclusion_JudgementFailed
 		return judgeRes, err
 	}
 

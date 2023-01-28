@@ -169,17 +169,23 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 			if compileRes == nil {
 				continue
 			}
+			if err != nil {
+				sugar.With("err", compileRes.Status.String()).Error("failed to judge")
+			}
 
 			caseResult := &model.CaseResult{
-				Id:         testcase.Id,
-				Conclusion: judgeRes.Conclusion,
-				TotalTime:  uint32(judgeRes.TotalTime),
-				TotalSpace: float32(judgeRes.TotalSpace),
-				OutputKey:  judgeRes.OutputId,
+				Id:          testcase.Id,
+				Conclusion:  judgeRes.Conclusion,
+				DiffPolicy:  model.DiffPolicy_CUSTOM,
+				TotalTime:   uint32(judgeRes.TotalTime),
+				TotalSpace:  float32(judgeRes.TotalSpace),
+				ReturnValue: int32(judgeRes.ExitStatus),
+				OutputKey:   judgeRes.OutputId,
 			}
-			if err != nil {
+			if judgeRes.Conclusion == model.Conclusion_Accepted {
 
 			}
+
 			subtaskResult.CaseResults = append(subtaskResult.CaseResults, caseResult)
 		}
 
