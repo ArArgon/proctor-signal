@@ -132,12 +132,13 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 	defer w.judge.RemoveFiles([]string{compileRes.ArtifactFileId})
 
 	if err != nil {
-		sugar.With("err", err).Error("failed to read compile output")
+		sugar.With("err", compileRes.Status.String()).Error("failed to finish compile")
 		return internErr, err
 	}
+
 	if compileRes.ExitStatus != 0 {
 		sugar.With("err", compileRes.Status.String()).Error("failed to finish compile")
-		bytes, err := io.ReadAll(compileRes.Output)
+		bytes, err := io.ReadAll(compileRes.Stderr)
 		if err != nil {
 			sugar.With("err", compileRes.Status.String()).Error("failed to read compile output")
 			compileErr.Result.CompilerOutput = lo.ToPtr("failed to read compile output")

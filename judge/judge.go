@@ -36,7 +36,8 @@ type CompileRes struct {
 	Status         envexec.Status
 	ExitStatus     int
 	Error          string
-	Output         io.Reader
+	Stdout         io.Reader
+	Stderr         io.Reader
 	TotalTime      time.Duration
 	TotalSpace     runner.Size
 	ArtifactFileId string
@@ -46,8 +47,9 @@ type ExecuteRes struct {
 	Status         envexec.Status
 	ExitStatus     int
 	Error          string
-	Output         io.Reader
-	CachedOutputID string
+	Stdout         io.Reader
+	Stderr         io.Reader
+	CachedStdoutID string
 	TotalTime      time.Duration
 	TotalSpace     runner.Size
 }
@@ -145,18 +147,22 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 
 	// read compile output
 	var err error
-	if res.Results[0].ExitStatus == 0 {
-		_, err = res.Results[0].Files["stdout"].Seek(0, 0)
+	var f *os.File
+	f, ok = res.Results[0].Files["stdout"]
+	if ok {
+		_, err = f.Seek(0, 0)
 		if err != nil {
 			return compileRes, errors.New("failed to reseek compile stdout")
 		}
-		compileRes.Output = res.Results[0].Files["stdout"]
-	} else {
-		_, err = res.Results[0].Files["stderr"].Seek(0, 0)
+		compileRes.Stdout = f
+	}
+	f, ok = res.Results[0].Files["stderr"]
+	if ok {
+		_, err = f.Seek(0, 0)
 		if err != nil {
 			return compileRes, errors.New("failed to reseek compile stderr")
 		}
-		compileRes.Output = res.Results[0].Files["stderr"]
+		compileRes.Stderr = f
 	}
 
 	return compileRes, nil
@@ -210,33 +216,31 @@ func (m *Manager) ExecuteFile(ctx context.Context, fileID string, stdin worker.C
 
 	// read execute output
 	var err error
+	var f *os.File
 	var ok bool
-	if res.Results[0].ExitStatus == 0 {
-		if cacheOutput {
-			executeRes.CachedOutputID, ok = res.Results[0].FileIDs["stdout"]
-			if !ok {
-				return executeRes, errors.New("failed to read execute stdout: " + err.Error())
-			}
-		} else {
-			_, err = res.Results[0].Files["stdout"].Seek(0, 0)
-			if err != nil {
-				return executeRes, errors.New("failed to reseek execute stdout: " + err.Error())
-			}
-			executeRes.Output = res.Results[0].Files["stdout"]
+	if cacheOutput {
+		executeRes.CachedStdoutID, ok = res.Results[0].FileIDs["stdout"]
+		if !ok {
+			return executeRes, errors.New("failed to read execute stdout: " + err.Error())
 		}
 	} else {
-		if cacheOutput {
-			executeRes.CachedOutputID, ok = res.Results[0].FileIDs["stderr"]
-			if !ok {
-				return executeRes, errors.New("failed to read execute stderr: " + err.Error())
-			}
-		} else {
-			_, err = res.Results[0].Files["stderr"].Seek(0, 0)
+		f, ok = res.Results[0].Files["stdout"]
+		if ok {
+			_, err = f.Seek(0, 0)
 			if err != nil {
-				return executeRes, errors.New("failed to reseek execute stderr")
+				return executeRes, errors.New("failed to reseek execute stdout")
 			}
-			executeRes.Output = res.Results[0].Files["stderr"]
+			executeRes.Stdout = f
 		}
+	}
+
+	f, ok = res.Results[0].Files["stderr"]
+	if ok {
+		_, err = f.Seek(0, 0)
+		if err != nil {
+			return executeRes, errors.New("failed to reseek execute stderr")
+		}
+		executeRes.Stderr = f
 	}
 
 	return executeRes, nil
