@@ -2,13 +2,11 @@ package main
 
 import (
 	"context"
-	"flag"
 	"log"
 	"os"
 	"os/signal"
 	"time"
 
-	judgeconfig "github.com/criyle/go-judge/cmd/executorserver/config"
 	"github.com/criyle/go-judge/filestore"
 	"github.com/samber/lo"
 	"go.uber.org/zap"
@@ -25,23 +23,25 @@ import (
 var logger *zap.Logger
 
 func main() {
-	conf := lo.Must(config.LoadConf("conf/signal.toml"))
-	initLogger(conf.GoJudgeConf)
+	conf := lo.Must(config.LoadConf("conf/signal.toml", "conf/language.toml"))
+	initLogger(conf)
 	sugar := logger.Sugar()
 	ctx, cancel := context.WithCancel(context.Background())
 
+	logger.Info("connecting to the backend...")
 	backendCli := lo.Must(backend.NewBackendClient(ctx, logger, conf))
+	logger.Info("Successfully connected to the backend")
 
 	defer func() { _ = logger.Sync() }()
 
 	sugar.Infof("conf: %+v", conf)
 
 	// Init judge
-	judge.LoadLanguageConfig("language.yaml")
+	//judge.LoadLanguageConfig("language.yaml")
 
 	// Init gojudge
 	judgeConf := conf.GoJudgeConf
-	gojudge.Init(logger)
+	gojudge.Init(logger, judgeConf)
 	fs, fsCleanUp := newFileStore(judgeConf)
 	b := gojudge.NewEnvBuilder(judgeConf)
 	envPool := gojudge.NewEnvPool(b, false)
@@ -55,10 +55,9 @@ func main() {
 	gojudge.NewForceGCWorker(judgeConf)
 
 	resManager := resource.NewResourceManager(logger, backendCli, fs.(*resource.FileStore))
-	judgeManager := judge.NewJudgeManager(work)
+	judgeManager := judge.NewJudgeManager(work, conf.LanguageConf)
 	w := judgeworker.NewWorker(judgeManager, resManager, backendCli)
-	//sugar.Infof(judgeManager.ExecuteCommand(context.Background(), "echo hello world!"))
-	w.Start(ctx, logger, 2)
+	w.Start(ctx, logger, judgeConf.Parallelism)
 
 	// Graceful shutdown...
 	sig := make(chan os.Signal, 3)
@@ -85,32 +84,19 @@ func main() {
 	<-ctx.Done()
 }
 
-func loadConf() *judgeconfig.Config {
-	var conf judgeconfig.Config
-	if err := conf.Load(); err != nil {
-		if err == flag.ErrHelp {
-			os.Exit(0)
-		}
-		log.Fatalln("load config failed ", err)
-	}
-	return &conf
-}
-
-func initLogger(conf *judgeconfig.Config) {
+func initLogger(conf *config.Config) {
 	if conf.Silent {
 		logger = zap.NewNop()
 		return
 	}
 
 	var err error
-	if conf.Release {
+	if conf.Level == "production" {
 		logger, err = zap.NewProduction()
 	} else {
 		zapConfig := zap.NewDevelopmentConfig()
 		zapConfig.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-		if !conf.EnableDebug {
-			zapConfig.Level.SetLevel(zap.InfoLevel)
-		}
+		zapConfig.Level.SetLevel(lo.Ternary(conf.Level == "debug", zap.DebugLevel, zap.InfoLevel))
 		logger, err = zapConfig.Build()
 	}
 	if err != nil {
@@ -118,7 +104,7 @@ func initLogger(conf *judgeconfig.Config) {
 	}
 }
 
-func newFileStore(conf *judgeconfig.Config) (filestore.FileStore, func() error) {
+func newFileStore(conf *config.JudgeConfig) (filestore.FileStore, func() error) {
 	const timeoutCheckInterval = 15 * time.Second
 	sugar := logger.Sugar()
 	var (

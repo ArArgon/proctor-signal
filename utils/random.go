@@ -1,8 +1,10 @@
 package utils
 
 import (
+	crypto_rand "crypto/rand"
+	"encoding/binary"
+	"log"
 	mathrand "math/rand"
-	"time"
 
 	"github.com/samber/lo"
 )
@@ -15,7 +17,13 @@ const (
 )
 
 func init() {
-	mathrand.Seed(time.Now().UnixNano())
+	var b [8]byte
+	_, err := crypto_rand.Read(b[:])
+	if err != nil {
+		log.Fatalf("random generator init failed: %+v\n", err)
+	}
+	sd := int64(binary.LittleEndian.Uint64(b[:]))
+	mathrand.Seed(sd)
 }
 
 // GenerateID generates an ID usually for random files. It is not cryptographically secure.
