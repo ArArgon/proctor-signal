@@ -172,7 +172,7 @@ func TestExecuteFile(t *testing.T) {
 		t.Run(language, func(t *testing.T) {
 			executeRes, err := judgeManger.ExecuteFile(ctx,
 				fileCaches[language],
-				&worker.MemoryFile{Content: []byte(stdin)},
+				&worker.MemoryFile{Content: []byte(stdin)}, false,
 				time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit),
 			)
 			assert.NoError(t, err)

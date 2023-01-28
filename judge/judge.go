@@ -43,19 +43,22 @@ type CompileRes struct {
 }
 
 type ExecuteRes struct {
-	Status     envexec.Status
-	ExitStatus int
-	Error      string
-	Output     io.Reader
-	TotalTime  time.Duration
-	TotalSpace runner.Size
+	Status         envexec.Status
+	ExitStatus     int
+	Error          string
+	Output         io.Reader
+	CachedOutputID string
+	TotalTime      time.Duration
+	TotalSpace     runner.Size
 }
 
 type JudgeRes struct {
 	Status     envexec.Status
 	ExitStatus int
 	Error      string
-	IsCorrect  bool
+	Conclusion model.Conclusion
+	OutputId   string
+	OutputSize uint64
 	TotalTime  time.Duration
 	TotalSpace runner.Size
 }
@@ -164,34 +167,40 @@ func (m *Manager) Compile(ctx context.Context, p *model.Problem, sub *model.Subm
 }
 
 // ExecuteFile execute a runnable file with stdin.
-func (m *Manager) ExecuteFile(ctx context.Context, fileID string, stdin worker.CmdFile, CPULimit time.Duration, memoryLimit runner.Size) (*ExecuteRes, error) {
+func (m *Manager) ExecuteFile(ctx context.Context, fileID string, stdin worker.CmdFile, cacheOutput bool, CPULimit time.Duration, memoryLimit runner.Size) (*ExecuteRes, error) {
 	name, _ := m.fs.Get(fileID)
 	if name == "" {
 		return nil, errors.New("failed to get runnable file with id: " + fileID)
 	}
 
-	res := <-m.worker.Execute(ctx, &worker.Request{
-		Cmd: []worker.Cmd{{
-			Env:         []string{"PATH=/usr/bin:/bin"},
-			Args:        []string{name},
-			CPULimit:    CPULimit,
-			MemoryLimit: memoryLimit,
-			ProcLimit:   50,
-			Files: []worker.CmdFile{
-				stdin,
-				&worker.Collector{Name: "stdout", Max: 10240},
-				&worker.Collector{Name: "stderr", Max: 10240},
-			},
-			CopyIn: map[string]worker.CmdFile{
-				name: &worker.CachedFile{FileID: fileID},
-			},
-			CopyOut: []worker.CmdCopyOutFile{
-				{Name: "stdout", Optional: true},
-				{Name: "stderr", Optional: true},
-			},
-		}},
-	})
+	cmd := worker.Cmd{
+		Env:         []string{"PATH=/usr/bin:/bin"},
+		Args:        []string{name},
+		CPULimit:    CPULimit,
+		MemoryLimit: memoryLimit,
+		ProcLimit:   50,
+		Files: []worker.CmdFile{
+			stdin,
+			&worker.Collector{Name: "stdout", Max: 10240},
+			&worker.Collector{Name: "stderr", Max: 10240},
+		},
+		CopyIn: map[string]worker.CmdFile{
+			name: &worker.CachedFile{FileID: fileID},
+		},
+		CopyOut: []worker.CmdCopyOutFile{
+			{Name: "stdout", Optional: true},
+			{Name: "stderr", Optional: true},
+		},
+	}
 
+	cmdCopyOutFile := []worker.CmdCopyOutFile{{Name: "stdout", Optional: true}, {Name: "stderr", Optional: true}}
+	if cacheOutput {
+		cmd.CopyOutCached = cmdCopyOutFile
+	} else {
+		cmd.CopyOut = cmdCopyOutFile
+	}
+
+	res := <-m.worker.Execute(ctx, &worker.Request{Cmd: []worker.Cmd{cmd}})
 	executeRes := &ExecuteRes{
 		Status:     res.Results[0].Status,
 		ExitStatus: res.Results[0].ExitStatus,
@@ -205,23 +214,38 @@ func (m *Manager) ExecuteFile(ctx context.Context, fileID string, stdin worker.C
 
 	// read execute output
 	var err error
+	var ok bool
 	if res.Results[0].ExitStatus == 0 {
-		_, err = res.Results[0].Files["stdout"].Seek(0, 0)
-		if err != nil {
-			return executeRes, errors.New("failed to reseek execute stdout: " + err.Error())
-		}
-		executeRes.Output = res.Results[0].Files["stdout"]
-		if err != nil && err != io.EOF {
-			return executeRes, errors.New("failed to read execute stdout: " + err.Error())
+		if cacheOutput {
+			executeRes.CachedOutputID, ok = res.Results[0].FileIDs["stdout"]
+			if !ok {
+				return executeRes, errors.New("failed to read execute stdout: " + err.Error())
+			}
+		} else {
+			_, err = res.Results[0].Files["stdout"].Seek(0, 0)
+			if err != nil {
+				return executeRes, errors.New("failed to reseek execute stdout: " + err.Error())
+			}
+			executeRes.Output = res.Results[0].Files["stdout"]
+			if err != nil && err != io.EOF {
+				return executeRes, errors.New("failed to read execute stdout: " + err.Error())
+			}
 		}
 	} else {
-		_, err = res.Results[0].Files["stderr"].Seek(0, 0)
-		if err != nil {
-			return executeRes, errors.New("failed to reseek execute stderr")
-		}
-		executeRes.Output = res.Results[0].Files["stderr"]
-		if err != nil && err != io.EOF {
-			return executeRes, errors.New("failed to read execute stderr")
+		if cacheOutput {
+			executeRes.CachedOutputID, ok = res.Results[0].FileIDs["stderr"]
+			if !ok {
+				return executeRes, errors.New("failed to read execute stderr: " + err.Error())
+			}
+		} else {
+			_, err = res.Results[0].Files["stderr"].Seek(0, 0)
+			if err != nil {
+				return executeRes, errors.New("failed to reseek execute stderr")
+			}
+			executeRes.Output = res.Results[0].Files["stderr"]
+			if err != nil && err != io.EOF {
+				return executeRes, errors.New("failed to read execute stderr")
+			}
 		}
 	}
 
@@ -229,7 +253,7 @@ func (m *Manager) ExecuteFile(ctx context.Context, fileID string, stdin worker.C
 }
 
 func (m *Manager) Judge(ctx context.Context, fileID string, testcase *model.TestCase, CPULimit time.Duration, memoryLimit runner.Size) (*JudgeRes, error) {
-	executeRes, err := m.ExecuteFile(ctx, fileID, &worker.CachedFile{FileID: testcase.InputKey}, CPULimit, memoryLimit)
+	executeRes, err := m.ExecuteFile(ctx, fileID, &worker.CachedFile{FileID: testcase.InputKey}, true, CPULimit, memoryLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -238,6 +262,7 @@ func (m *Manager) Judge(ctx context.Context, fileID string, testcase *model.Test
 		Status:     executeRes.Status,
 		ExitStatus: executeRes.ExitStatus,
 		Error:      executeRes.Error,
+		OutputId:   executeRes.CachedOutputID,
 		TotalTime:  executeRes.TotalTime,
 		TotalSpace: executeRes.TotalSpace,
 	}
@@ -252,17 +277,17 @@ func (m *Manager) Judge(ctx context.Context, fileID string, testcase *model.Test
 	executeOutputBuff := make([]byte, buffLen)
 	expectedOutputBuff := make([]byte, buffLen)
 	var expectLen, actualLen int
-	judgeRes.IsCorrect = true
+	judgeRes.Conclusion = model.Conclusion_Accepted
 	for {
 		expectLen, err = io.ReadFull(expectedOutputReader, expectedOutputBuff)
 		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-			judgeRes.IsCorrect = false
+			judgeRes.Conclusion = model.Conclusion_JudgementFailed
 			return judgeRes, err
 		}
 
 		actualLen, err = io.ReadFull(executeRes.Output, executeOutputBuff)
 		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-			judgeRes.IsCorrect = false
+			judgeRes.Conclusion = model.Conclusion_JudgementFailed
 			return judgeRes, err
 		}
 
@@ -271,17 +296,17 @@ func (m *Manager) Judge(ctx context.Context, fileID string, testcase *model.Test
 				// cut off ' ' or '\n' at the end of executeOutputBuff
 				actualLen--
 			} else {
-				judgeRes.IsCorrect = false
+				judgeRes.Conclusion = model.Conclusion_WrongAnswer
 			}
 		} else if actualLen > expectLen+1 || actualLen < expectLen {
-			judgeRes.IsCorrect = false
+			judgeRes.Conclusion = model.Conclusion_WrongAnswer
 		}
 
 		if !reflect.DeepEqual(expectedOutputBuff[:expectLen], executeOutputBuff[:actualLen]) {
-			judgeRes.IsCorrect = false
+			judgeRes.Conclusion = model.Conclusion_WrongAnswer
 		}
 
-		if expectLen < buffLen || !judgeRes.IsCorrect {
+		if expectLen < buffLen || judgeRes.Conclusion != model.Conclusion_Accepted {
 			break
 		}
 	}

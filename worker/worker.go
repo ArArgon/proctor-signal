@@ -14,6 +14,7 @@ import (
 	"proctor-signal/resource"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/criyle/go-sandbox/runner"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.uber.org/multierr"
@@ -161,6 +162,25 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 		// TODO: Score this subtask.
 
 		// TODO: Return opinion.
+		subtaskResult := &model.SubtaskResult{Id: subtask.Id, IsRun: true, CaseResults: make([]*model.CaseResult, len(subtask.TestCases))}
+		for _, testcase := range subtask.TestCases {
+			judgeRes, err := w.judge.Judge(ctx, compileRes.ArtifactFileId, testcase, time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit))
+			if compileRes == nil {
+				continue
+			}
+
+			caseResult := &model.CaseResult{
+				Id:         testcase.Id,
+				Conclusion: judgeRes.Conclusion,
+				TotalTime:  uint32(judgeRes.TotalTime),
+				TotalSpace: float32(judgeRes.TotalSpace),
+				OutputKey:  judgeRes.OutputId,
+			}
+			if err != nil {
+
+			}
+			subtaskResult.CaseResults = append(subtaskResult.CaseResults, caseResult)
+		}
 
 		return true
 	})
