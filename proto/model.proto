@@ -168,7 +168,9 @@ message JudgeResult {
   google.protobuf.Timestamp complete_time = 4;
 
   Conclusion conclusion = 5;
-  optional string remark = 6;
+
+  // This field carries the internal error message.
+  optional string err_message = 6;
   int32 score = 7;
 
   uint32 total_time = 8;
