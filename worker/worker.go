@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"io"
 	"sync"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"proctor-signal/resource"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/criyle/go-sandbox/runner"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.uber.org/multierr"
@@ -112,7 +114,41 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 	}
 	defer unlock()
 
-	// TODO: Compile source code.
+	// Compile source code.
+	compileErr := &backend.CompleteJudgeTaskRequest{
+		Result: &model.JudgeResult{
+			SubmissionId: sub.Id,
+			ProblemId:    p.Id,
+			ReceiveTime:  timestamppb.New(receiveTime),
+		},
+	}
+	compileRes, err := w.judge.Compile(ctx, sub)
+	if compileRes == nil {
+		sugar.With("err", err).Error("failed to start compile")
+		compileErr.Result.Conclusion = model.Conclusion_Invalid
+		compileErr.Result.Remark = lo.ToPtr(err.Error())
+		return compileErr, err
+	}
+	defer w.judge.RemoveFiles([]string{compileRes.ArtifactFileId})
+
+	if err != nil {
+		sugar.With("err", compileRes.Status.String()).Error("failed to finish compile")
+		return internErr, err
+	}
+
+	if compileRes.ExitStatus != 0 {
+		sugar.With("err", compileRes.Status.String()).Error("failed to finish compile")
+		bytes, err := io.ReadAll(compileRes.Stderr)
+		if err != nil {
+			sugar.With("err", compileRes.Status.String()).Error("failed to read compile output")
+			compileErr.Result.CompilerOutput = lo.ToPtr("failed to read compile output")
+		} else {
+			compileErr.Result.CompilerOutput = lo.ToPtr(string(bytes))
+		}
+		compileErr.Result.Remark = lo.ToPtr(compileRes.Error)
+		compileErr.Result.Conclusion = model.ConvertStatusToConclusion(compileRes.Status)
+		return compileErr, nil
+	}
 
 	// Compose the DAG.
 	dag := model.NewSubtaskGraph(p)
@@ -127,6 +163,31 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 		// TODO: Score this subtask.
 
 		// TODO: Return opinion.
+		subtaskResult := &model.SubtaskResult{Id: subtask.Id, IsRun: true, CaseResults: make([]*model.CaseResult, len(subtask.TestCases))}
+		for _, testcase := range subtask.TestCases {
+			judgeRes, err := w.judge.Judge(ctx, compileRes.ArtifactFileId, testcase, time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit))
+			if compileRes == nil {
+				continue
+			}
+			if err != nil {
+				sugar.With("err", compileRes.Status.String()).Error("failed to judge")
+			}
+
+			caseResult := &model.CaseResult{
+				Id:          testcase.Id,
+				Conclusion:  judgeRes.Conclusion,
+				DiffPolicy:  model.DiffPolicy_CUSTOM,
+				TotalTime:   uint32(judgeRes.TotalTime),
+				TotalSpace:  float32(judgeRes.TotalSpace),
+				ReturnValue: int32(judgeRes.ExitStatus),
+				OutputKey:   judgeRes.OutputId,
+			}
+			if judgeRes.Conclusion == model.Conclusion_Accepted {
+
+			}
+
+			subtaskResult.CaseResults = append(subtaskResult.CaseResults, caseResult)
+		}
 
 		return true
 	})
