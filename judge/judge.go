@@ -256,7 +256,7 @@ func (m *Manager) Judge(ctx context.Context, fileID string, testcase *model.Test
 		Status:     executeRes.Status,
 		ExitStatus: executeRes.ExitStatus,
 		Error:      executeRes.Error,
-		OutputId:   executeRes.CachedOutputID,
+		OutputId:   executeRes.CachedStdoutID,
 		TotalTime:  executeRes.TotalTime,
 		TotalSpace: executeRes.TotalSpace,
 	}
@@ -279,7 +279,7 @@ func (m *Manager) Judge(ctx context.Context, fileID string, testcase *model.Test
 			return judgeRes, err
 		}
 
-		actualLen, err = io.ReadFull(executeRes.Output, executeOutputBuff)
+		actualLen, err = io.ReadFull(executeRes.Stdout, executeOutputBuff)
 		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 			judgeRes.Conclusion = model.Conclusion_JudgementFailed
 			return judgeRes, err

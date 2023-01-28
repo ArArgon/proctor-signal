@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"testing"
@@ -179,7 +180,12 @@ func TestExecuteFile(t *testing.T) {
 			if executeRes.ExitStatus != 0 {
 				t.Errorf("failed to execute: executeRes.ExitStatus != 0, executeRes: %+v", executeRes)
 			}
-			assert.Equal(t, stdout, executeRes.Output, fmt.Sprintf("executeRes: %+v", executeRes))
+			bytes, err := io.ReadAll(executeRes.Stdout)
+			if err != nil {
+				t.Errorf("failed to read execute output, executeRes: %+v", executeRes)
+			}
+
+			assert.Equal(t, stdout, string(bytes), fmt.Sprintf("executeRes: %+v", executeRes))
 		})
 	}
 }
