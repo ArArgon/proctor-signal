@@ -1,27 +1,34 @@
 syntax = "proto3";
 
 option go_package = "proctor-signal/external/backend";
+option java_package = "com.hjj.backend.judge";
 
 import "auth_service.proto";
 import "problem_service.proto";
 import "resource_service.proto";
+import "backend_service.proto";
 
 package signal.backend;
 
-// All services are hosted by the backend. Proctor calls these RPCs to interact with backend.
-service BackendService {
+// Authentication Service
+service AuthService {
   rpc Register(RegisterRequest) returns (RegisterResponse);
   rpc RenewToken(RenewTokenRequest) returns (RenewTokenResponse);
-  rpc GracefulExit(GracefulExitRequest) returns (GracefulExitResponse);
+}
 
-
+// All services are hosted by the backend. Proctor calls these RPCs to interact with backend.
+service BackendService {
+  // Problem Service
   rpc GetProblem(GetProblemRequest) returns (GetProblemResponse);
   rpc FetchJudgeTask(FetchJudgeTaskRequest) returns (FetchJudgeTaskResponse);
   rpc CompleteJudgeTask(CompleteJudgeTaskRequest) returns (CompleteJudgeTaskResponse);
 
-
+  // Resource Service
   rpc PutResource(PutResourceRequest) returns (PutResourceResponse);
   rpc PutResourceBatch(PutResourceBatchRequest) returns (PutResourceBatchResponse);
   rpc GetResource(GetResourceRequest) returns (GetResourceResponse);
   rpc GetResourceBatch(GetResourceBatchRequest) returns (GetResourceBatchResponse);
+
+  // Misc
+  rpc GracefulExit(GracefulExitRequest) returns (GracefulExitResponse);
 }

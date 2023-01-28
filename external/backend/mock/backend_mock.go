@@ -228,42 +228,16 @@ func (mr *MockClientMockRecorder) PutResourceStream(arg0, arg1, arg2, arg3 inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutResourceStream", reflect.TypeOf((*MockClient)(nil).PutResourceStream), arg0, arg1, arg2, arg3)
 }
 
-// Register mocks base method.
-func (m *MockClient) Register(arg0 context.Context, arg1 *backend.RegisterRequest, arg2 ...grpc.CallOption) (*backend.RegisterResponse, error) {
+// ReportExit mocks base method.
+func (m *MockClient) ReportExit(arg0 context.Context, arg1 string) error {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{arg0, arg1}
-	for _, a := range arg2 {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "Register", varargs...)
-	ret0, _ := ret[0].(*backend.RegisterResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "ReportExit", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
-// Register indicates an expected call of Register.
-func (mr *MockClientMockRecorder) Register(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+// ReportExit indicates an expected call of ReportExit.
+func (mr *MockClientMockRecorder) ReportExit(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{arg0, arg1}, arg2...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Register", reflect.TypeOf((*MockClient)(nil).Register), varargs...)
-}
-
-// RenewToken mocks base method.
-func (m *MockClient) RenewToken(arg0 context.Context, arg1 *backend.RenewTokenRequest, arg2 ...grpc.CallOption) (*backend.RenewTokenResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []interface{}{arg0, arg1}
-	for _, a := range arg2 {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "RenewToken", varargs...)
-	ret0, _ := ret[0].(*backend.RenewTokenResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RenewToken indicates an expected call of RenewToken.
-func (mr *MockClientMockRecorder) RenewToken(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{arg0, arg1}, arg2...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RenewToken", reflect.TypeOf((*MockClient)(nil).RenewToken), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReportExit", reflect.TypeOf((*MockClient)(nil).ReportExit), arg0, arg1)
 }

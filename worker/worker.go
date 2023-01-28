@@ -29,7 +29,18 @@ type Worker struct {
 }
 
 const maxTimeout = time.Minute * 10
-const backoffInterval = time.Millisecond * 200
+const backoffInterval = time.Millisecond * 500
+
+func NewWorker(
+	judgeManager *judge.Manager, resManager *resource.Manager, backendCli backend.BackendServiceClient,
+) *Worker {
+	return &Worker{
+		wg:         new(sync.WaitGroup),
+		judge:      judgeManager,
+		resManager: resManager,
+		backend:    backendCli,
+	}
+}
 
 func (w *Worker) Start(ctx context.Context, logger *zap.Logger, concurrency int) {
 	for i := 1; i <= concurrency; i++ {
@@ -40,7 +51,7 @@ func (w *Worker) Start(ctx context.Context, logger *zap.Logger, concurrency int)
 
 func (w *Worker) spin(ctx context.Context, logger *zap.Logger, id int) {
 	sugar := logger.Sugar().With("worker_id", id)
-	tick := time.NewTicker(time.Millisecond * 500)
+	tick := time.NewTicker(time.Millisecond * 1000)
 	defer w.wg.Done()
 	defer tick.Stop()
 	for {
@@ -77,10 +88,16 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 		return nil, err
 	}
 
-	if task.StatusCode < 200 || task.StatusCode >= 200 {
+	if task.StatusCode < 200 || task.StatusCode >= 300 {
 		err = errors.Errorf("backend error: %s", task.GetReason())
 		sugar.With("err", err).Error("failed to fetch task from remote, server-side err")
 		return nil, err
+	}
+
+	// No Content.
+	if task.StatusCode == 204 {
+		sugar.With("reason", task.GetReason()).Debug("no content received")
+		return nil, nil
 	}
 
 	if task.Task == nil {
@@ -183,7 +200,7 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 				OutputKey:   judgeRes.OutputId,
 			}
 			if judgeRes.Conclusion == model.Conclusion_Accepted {
-
+				sugar.Debug("case accepted") // Remove later.
 			}
 
 			subtaskResult.CaseResults = append(subtaskResult.CaseResults, caseResult)

@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+option go_package = "proctor-signal/external/backend";
+option java_package = "com.hjj.backend.judge";
+
+package signal.backend;
+
+message GracefulExitRequest {
+string reason = 1;
+string instance_id = 2;
+}
+
+message GracefulExitResponse {
+int32 status_code = 1;
+optional string reason = 2;
+}
+

@@ -1,2 +1,9 @@
 .idea/
 .vscode/
+
+### Keys
+*.pem
+*.pk8
+
+### macOS
+.DS_Store

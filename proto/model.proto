@@ -3,6 +3,7 @@ syntax = "proto3";
 import "google/protobuf/timestamp.proto";
 
 option go_package = "proctor-signal/model";
+option java_package = "com.hjj.backend.entity.judge";
 
 package signal.model;
 

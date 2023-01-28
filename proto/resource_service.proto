@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 option go_package = "proctor-signal/external/backend";
+option java_package = "com.hjj.backend.judge";
 
 package signal.backend;
 
