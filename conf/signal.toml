@@ -1,3 +1,5 @@
+level = 'dev'
+
 [backend]
 addr = 'localhost'
 httpPort = 8080

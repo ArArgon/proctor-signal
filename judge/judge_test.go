@@ -10,60 +10,78 @@ import (
 	"testing"
 	"time"
 
+	"github.com/samber/lo"
+	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-
-	"proctor-signal/external/gojudge"
-	"proctor-signal/model"
-	"proctor-signal/resource"
+	"gopkg.in/yaml.v3"
 
 	judgeconfig "github.com/criyle/go-judge/cmd/executorserver/config"
 	"github.com/criyle/go-judge/worker"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/criyle/go-sandbox/container"
+	"proctor-signal/config"
+	"proctor-signal/external/gojudge"
+	"proctor-signal/model"
+	"proctor-signal/resource"
+
 	"github.com/criyle/go-sandbox/runner"
-	"github.com/samber/lo"
-	"go.uber.org/zap"
 )
 
 var judgeManger *Manager
 
+var languageConfig config.LanguageConf
+
 func TestMain(m *testing.M) {
 	// Init gojudge
-	err := container.Init()
-	if err != nil {
-		panic("faild to init container: " + err.Error())
-	}
+	initGoJudge()
 
 	// Init logger.
-	config := zap.NewDevelopmentConfig()
-	config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-	config.Level.SetLevel(zap.InfoLevel)
-	logger := lo.Must(config.Build())
-	gojudge.Init(logger)
+	zapConfig := zap.NewDevelopmentConfig()
+	zapConfig.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	zapConfig.Level.SetLevel(zap.InfoLevel)
+	logger := lo.Must(zapConfig.Build())
+
+	conf := loadConf()
+	gojudge.Init(logger, conf)
 
 	// Prepare tmp dir.
 	loc, err := os.MkdirTemp(os.TempDir(), "signal")
 	if err != nil {
 		panic("faild to prepare tmp dir: " + err.Error())
 	}
-	defer func() { os.RemoveAll(loc) }()
+	defer func() { _ = os.RemoveAll(loc) }()
 
 	// Init fs.
 	fs := lo.Must(resource.NewFileStore(logger, loc))
 
-	conf := loadConf()
 	b := gojudge.NewEnvBuilder(conf)
 	envPool := gojudge.NewEnvPool(b, false)
 	gojudge.Prefork(envPool, conf.PreFork)
-	worker := gojudge.NewWorker(conf, envPool, fs)
+	goJudgeWorker := gojudge.NewWorker(conf, envPool, fs)
 
 	// init judgeManger
-	LoadLanguageConfig("../language.yaml")
-	judgeManger = NewJudgeManager(worker)
+	languageConfig = loadLanguageConfig("tests/language.yaml")
+	judgeManger = NewJudgeManager(goJudgeWorker, languageConfig)
 	judgeManger.fs = fs
 
 	os.Exit(m.Run())
+}
+
+func loadLanguageConfig(configPath string) config.LanguageConf {
+	f, err := os.Open(configPath)
+	defer func() { _ = f.Close() }()
+
+	if err != nil {
+		fmt.Printf("err: %v\n", err)
+		panic("fail to open language config")
+	}
+	res := make(config.LanguageConf)
+	err = yaml.NewDecoder(f).Decode(&res)
+	if err != nil {
+		fmt.Printf("err: %v\n", err)
+		panic("fail to decode language config")
+	}
+	return res
 }
 
 // func TestWokerExecute(t *testing.T) {
@@ -164,7 +182,7 @@ func TestExecuteFile(t *testing.T) {
 	stdin := "Hello,world.\n" // should not contain space
 	stdout := stdin
 
-	for language, _ := range languageConfig {
+	for language := range languageConfig {
 		// just for C
 		if language != "c" {
 			continue
@@ -190,7 +208,7 @@ func TestExecuteFile(t *testing.T) {
 	}
 }
 
-func loadConf() *judgeconfig.Config {
+func loadConf() *config.JudgeConfig {
 	var conf judgeconfig.Config
 	if err := conf.Load(); err != nil {
 		if err == flag.ErrHelp {
@@ -198,5 +216,5 @@ func loadConf() *judgeconfig.Config {
 		}
 		log.Fatalln("load config failed ", err)
 	}
-	return &conf
+	return (*config.JudgeConfig)(&conf)
 }
