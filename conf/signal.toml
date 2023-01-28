@@ -4,4 +4,5 @@ httpPort = 8080
 grpcPort = 6565
 insecureGrpc = true
 insecureJwt = true
+httpPrefix = '/api/judge'
 authSecret = 'ss' # should be configured in ENV.
