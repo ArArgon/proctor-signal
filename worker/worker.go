@@ -86,10 +86,16 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 		return nil, err
 	}
 
-	if task.StatusCode < 200 || task.StatusCode >= 200 {
+	if task.StatusCode < 200 || task.StatusCode >= 300 {
 		err = errors.Errorf("backend error: %s", task.GetReason())
 		sugar.With("err", err).Error("failed to fetch task from remote, server-side err")
 		return nil, err
+	}
+
+	// No Content.
+	if task.StatusCode == 204 {
+		sugar.With("reason", task.GetReason()).Debug("no content received")
+		return nil, nil
 	}
 
 	if task.Task == nil {
