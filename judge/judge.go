@@ -55,7 +55,6 @@ type ExecuteRes struct {
 }
 
 type JudgeRes struct {
-	Status     envexec.Status
 	ExitStatus int
 	Error      string
 	Conclusion model.Conclusion
@@ -248,18 +247,21 @@ func (m *Manager) ExecuteFile(ctx context.Context, fileID string, stdin worker.C
 
 func (m *Manager) Judge(ctx context.Context, fileID string, testcase *model.TestCase, CPULimit time.Duration, memoryLimit runner.Size) (*JudgeRes, error) {
 	executeRes, err := m.ExecuteFile(ctx, fileID, &worker.CachedFile{FileID: testcase.InputKey}, true, CPULimit, memoryLimit)
-	if err != nil {
+	if executeRes == nil {
+		// faild to start execute
 		return nil, err
 	}
 
 	judgeRes := &JudgeRes{
-		Status:     executeRes.Status,
 		ExitStatus: executeRes.ExitStatus,
 		Error:      executeRes.Error,
-		OutputId:   executeRes.CachedStdoutID,
 		TotalTime:  executeRes.TotalTime,
 		TotalSpace: executeRes.TotalSpace,
 	}
+	if err != nil {
+		return judgeRes, err
+	}
+	judgeRes.OutputId = executeRes.CachedStdoutID
 
 	_, f := m.fs.Get(testcase.OutputKey)
 	expectedOutputReader, err := envexec.FileToReader(f)
@@ -285,6 +287,7 @@ func (m *Manager) Judge(ctx context.Context, fileID string, testcase *model.Test
 			judgeRes.Conclusion = model.Conclusion_JudgementFailed
 			return judgeRes, err
 		}
+		judgeRes.OutputSize += uint64(actualLen)
 
 		if actualLen == expectLen+1 {
 			if executeOutputBuff[actualLen-1] == ' ' || executeOutputBuff[actualLen-1] == '\n' {
