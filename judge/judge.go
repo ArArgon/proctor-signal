@@ -60,6 +60,7 @@ type JudgeRes struct {
 	ExitStatus int
 	Error      string
 	Conclusion model.Conclusion
+	Output     io.Reader
 	OutputId   string
 	OutputSize uint64
 	TotalTime  time.Duration
@@ -248,9 +249,17 @@ func (m *Manager) Judge(ctx context.Context, fileID string, testcase *model.Test
 	if err != nil {
 		return judgeRes, err
 	}
-	judgeRes.OutputId = executeRes.CachedStdoutID
 
-	_, f := m.fs.Get(testcase.OutputKey)
+	judgeRes.OutputId = executeRes.CachedStdoutID
+	_, f := m.fs.Get(judgeRes.OutputId)
+	judgeRes.Output, err = envexec.FileToReader(f)
+	if err != nil {
+		judgeRes.Conclusion = model.Conclusion_JudgementFailed
+		return judgeRes, err
+	}
+	executeOutputReader := judgeRes.Output
+
+	_, f = m.fs.Get(testcase.OutputKey)
 	expectedOutputReader, err := envexec.FileToReader(f)
 	if err != nil {
 		judgeRes.Conclusion = model.Conclusion_JudgementFailed
@@ -269,7 +278,7 @@ func (m *Manager) Judge(ctx context.Context, fileID string, testcase *model.Test
 			return judgeRes, err
 		}
 
-		actualLen, err = io.ReadFull(executeRes.Stdout, executeOutputBuff)
+		actualLen, err = io.ReadFull(executeOutputReader, executeOutputBuff)
 		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 			judgeRes.Conclusion = model.Conclusion_JudgementFailed
 			return judgeRes, err

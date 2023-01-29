@@ -204,7 +204,15 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 			if judgeRes.OutputId != "" {
 				caseResult.OutputKey = judgeRes.OutputId
 				caseResult.OutputSize = judgeRes.OutputSize
-				// TODO: TruncatedOutput
+
+				bytes := make([]byte, 1024) // 1 KiB
+				_, err := io.ReadFull(judgeRes.Output, bytes)
+				if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+					caseResult.TruncatedOutput = lo.ToPtr("failed to read execute output")
+					sugar.With("err", err).Error("failed to read judge output")
+				} else {
+					caseResult.TruncatedOutput = lo.ToPtr(string(bytes))
+				}
 			}
 
 			subtaskResult.TotalTime += caseResult.TotalTime
