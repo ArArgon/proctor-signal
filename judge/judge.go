@@ -17,7 +17,6 @@ import (
 	"github.com/criyle/go-judge/envexec"
 	"github.com/criyle/go-judge/worker"
 	"github.com/criyle/go-sandbox/runner"
-	"github.com/samber/lo"
 )
 
 func NewJudgeManager(worker worker.Worker, langConf config.LanguageConf) *Manager {
@@ -28,10 +27,9 @@ func NewJudgeManager(worker worker.Worker, langConf config.LanguageConf) *Manage
 }
 
 type Manager struct {
-	worker     worker.Worker
-	resManager *resource.Manager
-	fs         *resource.FileStore // share with worker
-	langConf   config.LanguageConf
+	worker   worker.Worker
+	fs       *resource.FileStore // share with worker
+	langConf config.LanguageConf
 }
 
 type CompileRes struct {
@@ -308,33 +306,33 @@ func (m *Manager) Judge(ctx context.Context, fileID string, testcase *model.Test
 	return judgeRes, nil
 }
 
-func (m *Manager) ExecuteCommand(ctx context.Context, cmd string) string {
-	res := <-m.worker.Execute(ctx, &worker.Request{
-		Cmd: []worker.Cmd{{
-			Env:         []string{"PATH=/usr/bin:/bin"},
-			Args:        strings.Split(cmd, " "),
-			CPULimit:    time.Second,
-			MemoryLimit: 104857600,
-			ProcLimit:   50,
-			Files: []worker.CmdFile{
-				&worker.MemoryFile{Content: []byte("")},
-				&worker.Collector{Name: "stdout", Max: 10240},
-				&worker.Collector{Name: "stderr", Max: 10240},
-			},
-			CopyOut: []worker.CmdCopyOutFile{
-				{Name: "stdout", Optional: true},
-				{Name: "stderr", Optional: true},
-			},
-		}},
-	})
+// func (m *Manager) ExecuteCommand(ctx context.Context, cmd string) string {
+// 	res := <-m.worker.Execute(ctx, &worker.Request{
+// 		Cmd: []worker.Cmd{{
+// 			Env:         []string{"PATH=/usr/bin:/bin"},
+// 			Args:        strings.Split(cmd, " "),
+// 			CPULimit:    time.Second,
+// 			MemoryLimit: 104857600,
+// 			ProcLimit:   50,
+// 			Files: []worker.CmdFile{
+// 				&worker.MemoryFile{Content: []byte("")},
+// 				&worker.Collector{Name: "stdout", Max: 10240},
+// 				&worker.Collector{Name: "stderr", Max: 10240},
+// 			},
+// 			CopyOut: []worker.CmdCopyOutFile{
+// 				{Name: "stdout", Optional: true},
+// 				{Name: "stderr", Optional: true},
+// 			},
+// 		}},
+// 	})
 
-	files := res.Results[0].Files
+// 	files := res.Results[0].Files
 
-	fmt.Printf(
-		"stdout: %s\nstderr: %s",
-		lo.Must(io.ReadAll(files["stdout"])),
-		lo.Must(io.ReadAll(files["stderr"])),
-	)
+// 	fmt.Printf(
+// 		"stdout: %s\nstderr: %s",
+// 		lo.Must(io.ReadAll(files["stdout"])),
+// 		lo.Must(io.ReadAll(files["stderr"])),
+// 	)
 
-	return fmt.Sprintf("%+v", res)
-}
+// 	return fmt.Sprintf("%+v", res)
+// }
