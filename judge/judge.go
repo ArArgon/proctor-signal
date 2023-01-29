@@ -155,7 +155,7 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 }
 
 // ExecuteFile execute a runnable file with stdin.
-func (m *Manager) ExecuteFile(ctx context.Context, cmd string, stdin worker.CmdFile, copyInFileIDs map[string]string, cacheOutput bool, CPULimit time.Duration, memoryLimit runner.Size) (*ExecuteRes, error) {
+func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile, copyInFileIDs map[string]string, cacheOutput bool, CPULimit time.Duration, memoryLimit runner.Size) (*ExecuteRes, error) {
 	// name, _ := m.fs.Get(fileID)
 	// if name == "" {
 	// 	return nil, errors.New("failed to get runnable file with id: " + fileID)
@@ -240,7 +240,7 @@ func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[
 		return nil, fmt.Errorf("config for %s not found", language)
 	}
 
-	executeRes, err := m.ExecuteFile(ctx, conf.ExecuteCmd, &worker.CachedFile{FileID: testcase.InputKey}, copyInFileIDs, true, CPULimit, memoryLimit)
+	executeRes, err := m.Execute(ctx, conf.ExecuteCmd, &worker.CachedFile{FileID: testcase.InputKey}, copyInFileIDs, true, CPULimit, memoryLimit)
 	if executeRes == nil {
 		// faild to start execute
 		return nil, err
