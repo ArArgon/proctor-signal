@@ -150,7 +150,7 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 		compileErr.Result.ErrMessage = lo.ToPtr(err.Error())
 		return compileErr, err
 	}
-	defer w.judge.RemoveFiles([]string{compileRes.ArtifactFileId})
+	defer w.judge.RemoveFiles(compileRes.ArtifactFileIDs)
 
 	if err != nil {
 		sugar.With("err", compileRes.Status.String()).Error("failed to finish compile")
@@ -189,7 +189,7 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 			caseResult := &model.CaseResult{Id: testcase.Id}
 			subtaskResult.CaseResults = append(subtaskResult.CaseResults, caseResult)
 
-			judgeRes, err := w.judge.Judge(ctx, compileRes.ArtifactFileId, testcase, time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit))
+			judgeRes, err := w.judge.Judge(ctx, sub.Language, compileRes.ArtifactFileIDs, testcase, time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit))
 			if judgeRes == nil {
 				sugar.With("err", err).Error("failed to start judge")
 				caseResult.Conclusion = model.Conclusion_JudgementFailed

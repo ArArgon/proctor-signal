@@ -33,14 +33,14 @@ type Manager struct {
 }
 
 type CompileRes struct {
-	Status         envexec.Status
-	ExitStatus     int
-	Error          string
-	Stdout         io.Reader
-	Stderr         io.Reader
-	TotalTime      time.Duration
-	TotalSpace     runner.Size
-	ArtifactFileId string
+	Status          envexec.Status
+	ExitStatus      int
+	Error           string
+	Stdout          io.Reader
+	Stderr          io.Reader
+	TotalTime       time.Duration
+	TotalSpace      runner.Size
+	ArtifactFileIDs map[string]string
 }
 
 type ExecuteRes struct {
@@ -75,7 +75,7 @@ type JudgeRes struct {
 //	Options           map[string]string `yaml:"Options"`
 //}
 
-func (m *Manager) RemoveFiles(fileIDs []string) {
+func (m *Manager) RemoveFiles(fileIDs map[string]string) {
 	for _, v := range fileIDs {
 		m.fs.Remove(v)
 	}
@@ -121,10 +121,11 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 		TotalSpace: res.Results[0].Memory,
 	}
 
-	compileRes.ArtifactFileId, ok = res.Results[0].FileIDs[compileConf.ArtifactName]
+	_, ok = res.Results[0].FileIDs[compileConf.ArtifactName]
 	if !ok {
-		return compileRes, errors.New("failed to cache ArtifactFileName")
+		return compileRes, errors.New("failed to cache ArtifactFile")
 	}
+	compileRes.ArtifactFileIDs = res.Results[0].FileIDs
 
 	if res.Error != nil {
 		return compileRes, res.Error
@@ -154,15 +155,15 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 }
 
 // ExecuteFile execute a runnable file with stdin.
-func (m *Manager) ExecuteFile(ctx context.Context, fileID string, stdin worker.CmdFile, cacheOutput bool, CPULimit time.Duration, memoryLimit runner.Size) (*ExecuteRes, error) {
-	name, _ := m.fs.Get(fileID)
-	if name == "" {
-		return nil, errors.New("failed to get runnable file with id: " + fileID)
-	}
+func (m *Manager) ExecuteFile(ctx context.Context, cmd string, stdin worker.CmdFile, copyInFileIDs map[string]string, cacheOutput bool, CPULimit time.Duration, memoryLimit runner.Size) (*ExecuteRes, error) {
+	// name, _ := m.fs.Get(fileID)
+	// if name == "" {
+	// 	return nil, errors.New("failed to get runnable file with id: " + fileID)
+	// }
 
-	cmd := worker.Cmd{
+	workerCmd := worker.Cmd{
 		Env:         []string{"PATH=/usr/bin:/bin"},
-		Args:        []string{name},
+		Args:        strings.Split(cmd, " "),
 		CPULimit:    CPULimit,
 		MemoryLimit: memoryLimit,
 		ProcLimit:   50,
@@ -171,23 +172,25 @@ func (m *Manager) ExecuteFile(ctx context.Context, fileID string, stdin worker.C
 			&worker.Collector{Name: "stdout", Max: 10240},
 			&worker.Collector{Name: "stderr", Max: 10240},
 		},
-		CopyIn: map[string]worker.CmdFile{
-			name: &worker.CachedFile{FileID: fileID},
-		},
 		CopyOut: []worker.CmdCopyOutFile{
 			{Name: "stdout", Optional: true},
 			{Name: "stderr", Optional: true},
 		},
 	}
 
-	cmdCopyOutFile := []worker.CmdCopyOutFile{{Name: "stdout", Optional: true}, {Name: "stderr", Optional: true}}
-	if cacheOutput {
-		cmd.CopyOutCached = cmdCopyOutFile
-	} else {
-		cmd.CopyOut = cmdCopyOutFile
+	workerCmd.CopyIn = make(map[string]worker.CmdFile)
+	for filename, fileID := range copyInFileIDs {
+		workerCmd.CopyIn[filename] = &worker.CachedFile{FileID: fileID}
 	}
 
-	res := <-m.worker.Execute(ctx, &worker.Request{Cmd: []worker.Cmd{cmd}})
+	cmdCopyOutFile := []worker.CmdCopyOutFile{{Name: "stdout", Optional: true}, {Name: "stderr", Optional: true}}
+	if cacheOutput {
+		workerCmd.CopyOutCached = cmdCopyOutFile
+	} else {
+		workerCmd.CopyOut = cmdCopyOutFile
+	}
+
+	res := <-m.worker.Execute(ctx, &worker.Request{Cmd: []worker.Cmd{workerCmd}})
 	executeRes := &ExecuteRes{
 		Status:     res.Results[0].Status,
 		ExitStatus: res.Results[0].ExitStatus,
@@ -231,8 +234,13 @@ func (m *Manager) ExecuteFile(ctx context.Context, fileID string, stdin worker.C
 	return executeRes, nil
 }
 
-func (m *Manager) Judge(ctx context.Context, fileID string, testcase *model.TestCase, CPULimit time.Duration, memoryLimit runner.Size) (*JudgeRes, error) {
-	executeRes, err := m.ExecuteFile(ctx, fileID, &worker.CachedFile{FileID: testcase.InputKey}, true, CPULimit, memoryLimit)
+func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[string]string, testcase *model.TestCase, CPULimit time.Duration, memoryLimit runner.Size) (*JudgeRes, error) {
+	conf, ok := m.langConf[language]
+	if !ok {
+		return nil, fmt.Errorf("config for %s not found", language)
+	}
+
+	executeRes, err := m.ExecuteFile(ctx, conf.ExecuteCmd, &worker.CachedFile{FileID: testcase.InputKey}, copyInFileIDs, true, CPULimit, memoryLimit)
 	if executeRes == nil {
 		// faild to start execute
 		return nil, err

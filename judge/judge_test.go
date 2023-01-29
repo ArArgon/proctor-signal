@@ -160,12 +160,12 @@ func loadLanguageConfig(configPath string) config.LanguageConf {
 // 	// t.Errorf("s: %+v, f: %+v", s, f)
 // }
 
-var fileCaches map[string]string
+var fileCaches map[string]map[string]string
 
 func TestCompile(t *testing.T) {
 	// p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
 	ctx := context.Background()
-	fileCaches = make(map[string]string)
+	fileCaches = make(map[string]map[string]string)
 
 	for language, conf := range languageConfig {
 		// just for C
@@ -184,7 +184,7 @@ func TestCompile(t *testing.T) {
 			if compileRes.ExitStatus != 0 {
 				t.Errorf("failed to finish compile: compileRes.Status != 0, compileRes: %+v", compileRes)
 			}
-			fileCaches[language] = compileRes.ArtifactFileId
+			fileCaches[language] = compileRes.ArtifactFileIDs
 		})
 	}
 }
@@ -195,7 +195,7 @@ func TestExecuteFile(t *testing.T) {
 	stdin := "Hello,world.\n" // should not contain space
 	stdout := stdin
 
-	for language := range languageConfig {
+	for language, conf := range languageConfig {
 		// just for C
 		if language != "c" {
 			continue
@@ -203,9 +203,9 @@ func TestExecuteFile(t *testing.T) {
 
 		t.Run(language, func(t *testing.T) {
 			executeRes, err := judgeManger.ExecuteFile(ctx,
-				fileCaches[language],
-				&worker.MemoryFile{Content: []byte(stdin)}, false,
-				time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit),
+				conf.ExecuteCmd,
+				&worker.MemoryFile{Content: []byte(stdin)}, fileCaches[language],
+				false, time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit),
 			)
 			assert.NoError(t, err)
 			if executeRes.ExitStatus != 0 {
