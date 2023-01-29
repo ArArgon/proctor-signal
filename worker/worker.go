@@ -154,7 +154,7 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 
 	if err != nil {
 		sugar.With("err", compileRes.Status.String()).Error("failed to finish compile")
-		return internErr("failed to finish compilation,", err.Error()), err
+		return internErr("failed to finish compile,", err.Error()), err
 	}
 
 	if compileRes.ExitStatus != 0 {
@@ -220,7 +220,7 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 				subtaskResult.TotalSpace = caseResult.TotalSpace
 			}
 			if err != nil {
-				sugar.With("err", err).Error("failed to start judge")
+				sugar.With("err", err).Error("failed to finish judge")
 				continue
 			}
 
@@ -250,7 +250,6 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 						subtaskResult.Conclusion = model.Conclusion_PartiallyCorrect
 					}
 				}
-				caseResult.Score = 0
 			}
 		}
 
@@ -258,7 +257,6 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 		if subtask.ScorePolicy == model.ScorePolicy_PCT {
 			subtaskResult.Score /= int32(len(subtask.TestCases))
 		}
-
 		return true
 	})
 
