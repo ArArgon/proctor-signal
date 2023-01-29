@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"proctor-signal/config"
 	"proctor-signal/model"
 	"proctor-signal/resource"
 
@@ -17,12 +18,12 @@ import (
 	"github.com/criyle/go-judge/worker"
 	"github.com/criyle/go-sandbox/runner"
 	"github.com/samber/lo"
-	"gopkg.in/yaml.v3"
 )
 
-func NewJudgeManager(worker worker.Worker) *Manager {
+func NewJudgeManager(worker worker.Worker, langConf config.LanguageConf) *Manager {
 	return &Manager{
-		worker: worker,
+		worker:   worker,
+		langConf: langConf,
 	}
 }
 
@@ -30,6 +31,7 @@ type Manager struct {
 	worker     worker.Worker
 	resManager *resource.Manager
 	fs         *resource.FileStore // share with worker
+	langConf   config.LanguageConf
 }
 
 type CompileRes struct {
@@ -64,30 +66,15 @@ type JudgeRes struct {
 	TotalSpace runner.Size
 }
 
-var languageConfig map[string]struct {
-	SourceName        string            `yaml:"SourceName"`
-	ArtifactName      string            `yaml:"ArtifactName"`
-	CompileCmd        string            `yaml:"CompileCmd"`
-	CompileTimeLimit  uint32            `yaml:"CompileTimeLimit"`
-	CompileSpaceLimit uint64            `yaml:"CompileSpaceLimit"`
-	ExecuteCmd        string            `yaml:"ExecuteCmd"`
-	Options           map[string]string `yaml:"Options"`
-}
-
-func LoadLanguageConfig(configPath string) {
-	f, err := os.Open(configPath)
-	defer func() { _ = f.Close() }()
-
-	if err != nil {
-		fmt.Printf("err: %v\n", err)
-		panic("fail to open language config")
-	}
-	err = yaml.NewDecoder(f).Decode(&languageConfig)
-	if err != nil {
-		fmt.Printf("err: %v\n", err)
-		panic("fail to decode language config")
-	}
-}
+//var languageConfig map[string]struct {
+//	SourceName        string            `yaml:"SourceName"`
+//	ArtifactName      string            `yaml:"ArtifactName"`
+//	CompileCmd        string            `yaml:"CompileCmd"`
+//	CompileTimeLimit  uint32            `yaml:"CompileTimeLimit"`
+//	CompileSpaceLimit uint64            `yaml:"CompileSpaceLimit"`
+//	ExecuteCmd        string            `yaml:"ExecuteCmd"`
+//	Options           map[string]string `yaml:"Options"`
+//}
 
 func (m *Manager) RemoveFiles(fileIDs []string) {
 	for _, v := range fileIDs {
@@ -97,7 +84,7 @@ func (m *Manager) RemoveFiles(fileIDs []string) {
 
 func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileRes, error) {
 	// TODO: compile options
-	compileConf, ok := languageConfig[sub.Language]
+	compileConf, ok := m.langConf[sub.Language]
 	if !ok {
 		return nil, fmt.Errorf("compile config for %s not found", sub.Language)
 	}

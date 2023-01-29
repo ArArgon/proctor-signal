@@ -1,20 +1,12 @@
-// Command executorserver will starts a http server that receives command to run
-// programs inside a sandbox.
 package gojudge
 
 import (
-	crypto_rand "crypto/rand"
-	"encoding/binary"
-	"flag"
 	"fmt"
 	"log"
-	math_rand "math/rand"
-	"os"
 	"runtime"
 	"runtime/debug"
 	"time"
 
-	"github.com/criyle/go-judge/cmd/executorserver/config"
 	"github.com/criyle/go-judge/cmd/executorserver/version"
 	"github.com/criyle/go-judge/env"
 	"github.com/criyle/go-judge/env/pool"
@@ -22,20 +14,18 @@ import (
 	"github.com/criyle/go-judge/filestore"
 	"github.com/criyle/go-judge/worker"
 	"go.uber.org/zap"
+
+	"proctor-signal/config"
 )
 
 var logger *zap.Logger
 
-func Init(l *zap.Logger) {
+func Init(l *zap.Logger, conf *config.JudgeConfig) {
 	logger = l
-	conf := loadConf()
 	if conf.Version {
 		fmt.Print(version.Version)
 		return
 	}
-	// initLogger(conf)
-	// defer logger.Sync()
-	initRand()
 	warnIfNotLinux()
 }
 
@@ -45,17 +35,6 @@ func warnIfNotLinux() {
 		logger.Sugar().Warn("Please notice that the primary supporting platform is Linux")
 		logger.Sugar().Warn("Windows and macOS(darwin) support are only recommended in development environment")
 	}
-}
-
-func loadConf() *config.Config {
-	var conf config.Config
-	if err := conf.Load(); err != nil {
-		if err == flag.ErrHelp {
-			os.Exit(0)
-		}
-		log.Fatalln("load config failed ", err)
-	}
-	return &conf
 }
 
 // func initLogger(conf *config.Config) {
@@ -80,17 +59,6 @@ func loadConf() *config.Config {
 // 	}
 // }
 
-func initRand() {
-	var b [8]byte
-	_, err := crypto_rand.Read(b[:])
-	if err != nil {
-		logger.Fatal("random generator init failed ", zap.Error(err))
-	}
-	sd := int64(binary.LittleEndian.Uint64(b[:]))
-	logger.Sugar().Infof("random seed: %d", sd)
-	math_rand.Seed(sd)
-}
-
 func Prefork(envPool worker.EnvironmentPool, prefork int) {
 	if prefork <= 0 {
 		return
@@ -109,7 +77,7 @@ func Prefork(envPool worker.EnvironmentPool, prefork int) {
 	}
 }
 
-func NewEnvBuilder(conf *config.Config) pool.EnvBuilder {
+func NewEnvBuilder(conf *config.JudgeConfig) pool.EnvBuilder {
 	b, err := env.NewBuilder(env.Config{
 		ContainerInitPath:  conf.ContainerInitPath,
 		MountConf:          conf.MountConf,
@@ -140,7 +108,7 @@ func NewEnvPool(b pool.EnvBuilder, enableMetrics bool) worker.EnvironmentPool {
 	return p
 }
 
-func NewWorker(conf *config.Config, envPool worker.EnvironmentPool, fs filestore.FileStore) worker.Worker {
+func NewWorker(conf *config.JudgeConfig, envPool worker.EnvironmentPool, fs filestore.FileStore) worker.Worker {
 	return worker.New(worker.Config{
 		FileStore:             fs,
 		EnvironmentPool:       envPool,
@@ -155,7 +123,7 @@ func NewWorker(conf *config.Config, envPool worker.EnvironmentPool, fs filestore
 	})
 }
 
-func NewForceGCWorker(conf *config.Config) {
+func NewForceGCWorker(conf *config.JudgeConfig) {
 	go func() {
 		ticker := time.NewTicker(conf.ForceGCInterval)
 		for {
