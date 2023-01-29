@@ -16,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	judgeconfig "github.com/criyle/go-judge/cmd/executorserver/config"
+	"github.com/criyle/go-judge/envexec"
 	"github.com/criyle/go-judge/worker"
 	"github.com/stretchr/testify/assert"
 
@@ -84,68 +85,81 @@ func loadLanguageConfig(configPath string) config.LanguageConf {
 	return res
 }
 
-// func TestWokerExecute(t *testing.T) {
-// 	ctx := context.Background()
+func TestWokerExecute(t *testing.T) {
+	ctx := context.Background()
 
-// 	res := <-judgeManger.worker.Execute(ctx, &worker.Request{
-// 		Cmd: []worker.Cmd{{
-// 			Env:         []string{"PATH=/usr/bin:/bin"},
-// 			Args:        []string{"cat", "tmp.txt"},
-// 			CPULimit:    time.Second,
-// 			MemoryLimit: 104857600,
-// 			ProcLimit:   50,
-// 			Files: []worker.CmdFile{
-// 				&worker.MemoryFile{Content: []byte("")},
-// 				&worker.Collector{Name: "stdout", Max: 10240},
-// 				&worker.Collector{Name: "stderr", Max: 10240},
-// 			},
-// 			CopyIn: map[string]worker.CmdFile{
-// 				"tmp.txt": &worker.MemoryFile{Content: []byte("114514")},
-// 			},
-// 			CopyOut: []worker.CmdCopyOutFile{
-// 				{Name: "stdout", Optional: true},
-// 				{Name: "stderr", Optional: true},
-// 			},
-// 			CopyOutCached: []worker.CmdCopyOutFile{
-// 				{Name: "tmp.txt", Optional: true},
-// 			},
-// 		}},
-// 	})
+	res := <-judgeManger.worker.Execute(ctx, &worker.Request{
+		Cmd: []worker.Cmd{{
+			Env:         []string{"PATH=/usr/bin:/bin"},
+			Args:        []string{"echo", "114514"},
+			CPULimit:    time.Second,
+			MemoryLimit: 104857600,
+			ProcLimit:   50,
+			Files: []worker.CmdFile{
+				&worker.MemoryFile{Content: []byte("")},
+				&worker.Collector{Name: "stdout", Max: 10240},
+				&worker.Collector{Name: "stderr", Max: 10240},
+			},
+			CopyOut: []worker.CmdCopyOutFile{
+				{Name: "stdout", Optional: true},
+				{Name: "stderr", Optional: true},
+			},
+			CopyOutCached: []worker.CmdCopyOutFile{
+				{Name: "stdout", Optional: true},
+			},
+		}},
+	})
 
-// 	executeRes := &ExecuteRes{
-// 		Status:     res.Results[0].Status,
-// 		ExitStatus: res.Results[0].ExitStatus,
-// 		Error:      res.Results[0].Error,
-// 	}
-// 	assert.NoError(t, res.Error)
+	// executeRes := &ExecuteRes{
+	// 	Status:     res.Results[0].Status,
+	// 	ExitStatus: res.Results[0].ExitStatus,
+	// 	Error:      res.Results[0].Error,
+	// }
+	assert.NoError(t, res.Error)
 
-// 	// read execute output
-// 	var executeOutput []byte
-// 	var err error
-// 	if res.Results[0].ExitStatus == 0 {
-// 		_, err = res.Results[0].Files["stdout"].Seek(0, 0)
-// 		assert.NoError(t, err, "failed to reseek execute stdout: ")
+	var executeOutput []byte
+	var err error
+	_, err = res.Results[0].Files["stdout"].Seek(0, 0)
+	assert.NoError(t, err, "failed to reseek execute stdout: ")
+	executeOutput, err = io.ReadAll(res.Results[0].Files["stdout"])
+	assert.NoError(t, err, "failed to read execute stdout: ")
 
-// 		executeOutput, err = io.ReadAll(res.Results[0].Files["stdout"])
-// 		assert.NoError(t, err, "failed to read execute stdout: ")
-// 	} else {
-// 		_, err = res.Results[0].Files["stderr"].Seek(0, 0)
-// 		assert.NoError(t, err, "failed to reseek execute stderr: ")
+	s, f := judgeManger.fs.Get(res.Results[0].FileIDs["stdout"])
+	assert.Equal(t, s, "stdout")
+	r, err := envexec.FileToReader(f)
+	assert.NoError(t, err, "failed to cached execute stdout: ")
 
-// 		executeOutput, err = io.ReadAll(res.Results[0].Files["stderr"])
-// 		assert.NoError(t, err, "failed to read execute stderr: ")
-// 	}
-// 	executeRes.Output = string(executeOutput)
-// 	assert.Equal(t, "114", executeRes.Output, executeRes)
+	bs, err := io.ReadAll(r)
+	assert.NoError(t, err, "failed to read cached execute stdout: ")
+	assert.Equal(t, executeOutput, bs, string(executeOutput)+"!="+string(bs))
 
-// 	id, ok := res.Results[0].FileIDs["tmp.txt"]
-// 	if !ok {
-// 		t.Errorf("failed to finish execute: failed to cache file, executeRes: %+v", executeRes)
-// 	}
+	// // read execute output
+	// var executeOutput []byte
+	// var err error
+	// if res.Results[0].ExitStatus == 0 {
+	// 	_, err = res.Results[0].Files["stdout"].Seek(0, 0)
+	// 	assert.NoError(t, err, "failed to reseek execute stdout: ")
 
-// 	s, f := judgeManger.fs.Get(id)
-// 	t.Errorf("s: %+v, f: %+v", s, f)
-// }
+	// 	executeOutput, err = io.ReadAll(res.Results[0].Files["stdout"])
+	// 	assert.NoError(t, err, "failed to read execute stdout: ")
+	// } else {
+	// 	_, err = res.Results[0].Files["stderr"].Seek(0, 0)
+	// 	assert.NoError(t, err, "failed to reseek execute stderr: ")
+
+	// 	executeOutput, err = io.ReadAll(res.Results[0].Files["stderr"])
+	// 	assert.NoError(t, err, "failed to read execute stderr: ")
+	// }
+	// executeRes.Output = string(executeOutput)
+	// assert.Equal(t, "114", executeRes.Output, executeRes)
+
+	// id, ok := res.Results[0].FileIDs["tmp.txt"]
+	// if !ok {
+	// 	t.Errorf("failed to finish execute: failed to cache file, executeRes: %+v", executeRes)
+	// }
+
+	// s, f := judgeManger.fs.Get(id)
+	// t.Errorf("s: %+v, f: %+v", s, f)
+}
 
 var fileCaches map[string]string
 
