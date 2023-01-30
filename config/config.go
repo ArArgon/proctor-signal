@@ -27,9 +27,8 @@ type LanguageConf map[string]struct {
 }
 
 type Config struct {
-	Level  string `default:"dev" env:"RELEASE" validate:"oneof=production dev debug"` // `production`, `dev`, `debug`
-	Silent bool   `default:"false" env:"SILENT"`
-
+	Level   string `default:"dev" env:"RELEASE" validate:"oneof=production dev debug"` // `production`, `dev`, `debug`
+	Silent  bool   `default:"false" env:"SILENT"`
 	Backend struct {
 		Addr         string `default:"localhost" env:"BACKEND_ADDR"`
 		GrpcPort     uint   `default:"9003" env:"BACKEND_GRPC_PORT"`
@@ -42,6 +41,9 @@ type Config struct {
 		JwtPubKey    string `env:"BACKEND_JWT_PUB_KEY"`
 	}
 	GoJudgeConf  *JudgeConfig
+	JudgeOptions struct {
+		MaxTruncatedOutput uint `default:"10240"`
+	}
 	LanguageConf LanguageConf
 }
 

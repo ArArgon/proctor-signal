@@ -124,7 +124,7 @@ func (m *FileStore) saveProblem(ent *entry, readers []*sourceReader) error {
 			return errors.WithMessagef(err, "failed to save file %s", resPath)
 		}
 
-		if written != r.size {
+		if r.size != -1 && written != r.size {
 			sugar.Errorf("unexpected file size, written: %d, expecting: %d", written, r.size)
 			return errors.Errorf("unexpected file size, written: %d, expecting: %d", written, r.size)
 		}
@@ -175,6 +175,76 @@ func (m *FileStore) evictProblem(p *entry) error {
 
 func (m *FileStore) GetSpaceInfo() (*disk.UsageStat, error) {
 	return disk.Usage(m.rootLoc)
+}
+
+// GetOsFile retrieves the *os.File, name of the given file.
+func (m *FileStore) GetOsFile(id string) (*os.File, string, error) {
+	m.mut.RLock()
+	defer m.mut.RUnlock()
+
+	var (
+		loc  string
+		name string
+		ok   bool
+	)
+
+	if strings.HasPrefix(id, "problem/") {
+		// problem/:problem_key/:data_key
+		parts := strings.Split(id, "/")
+		if len(parts) != 3 {
+			m.logger.Sugar().Errorf("failed to get a problem file, invalid id: %s", id)
+			return nil, "", nil
+		}
+
+		key := path.Join(parts[1], parts[2])
+		loc = path.Join(m.probLoc, parts[1], sha(parts[2]))
+
+		if name, ok = m.probFiles[key]; !ok {
+			m.logger.Sugar().Infof("file not found: %s", key)
+			return nil, "", nil
+		}
+
+		if _, err := os.Stat(loc); os.IsNotExist(err) {
+			m.logger.Sugar().Errorf("missing file in cache: %s", key)
+			return nil, "", nil
+		}
+	} else {
+		loc = path.Join(m.tmpLoc, id)
+		if _, err := os.Stat(loc); os.IsNotExist(err) {
+			return nil, "", nil
+		}
+		if name, ok = m.tmpFiles[id]; !ok {
+			name = id
+		}
+	}
+
+	file, err := os.Open(loc)
+
+	return file, name, err
+}
+
+// BulkRemove removes temporary files in bulk and returns the removed file count & err.
+func (m *FileStore) BulkRemove(ids []string) (int, error) {
+	m.mut.Lock()
+	defer m.mut.Unlock()
+
+	var totalErr error
+	var count = 0
+
+	for _, id := range ids {
+		loc := path.Join(m.tmpLoc, id)
+		if _, ok := m.tmpFiles[id]; !ok {
+			continue
+		}
+		if err := os.Remove(loc); err != nil && !errors.Is(err, os.ErrNotExist) {
+			m.logger.Sugar().With("err", err).Errorf("failed to remove file [id: %s] [loc: %s]", id, loc)
+			totalErr = multierr.Append(totalErr, err)
+		}
+		count++
+		delete(m.tmpFiles, id)
+	}
+
+	return count, totalErr
 }
 
 // Add adds a new file into the tmp section.
