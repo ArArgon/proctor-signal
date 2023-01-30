@@ -266,46 +266,60 @@ func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[
 		return judgeRes, err
 	}
 
-	buffLen := 1024
-	executeOutputBuff := make([]byte, buffLen)
-	testcaseOutputBuff := make([]byte, buffLen)
-	var expectLen, actualLen int
-	judgeRes.Conclusion = model.Conclusion_Accepted
+	ok, err = compare(testcaseOutputReader, executeOutputReader, 1024)
+	if err != nil {
+		judgeRes.Conclusion = model.Conclusion_JudgementFailed
+		return judgeRes, err
+	}
+
+	if ok {
+		judgeRes.Conclusion = model.Conclusion_Accepted
+	} else {
+		judgeRes.Conclusion = model.Conclusion_WrongAnswer
+	}
+
+	return judgeRes, nil
+}
+
+// Compare compares actual's content to expect's content, return the result whether they are equal.
+// It should just be called by func Judge.
+func compare(expected, actual io.Reader, buffLen int) (bool, error) {
+	expectedOutputBuff := make([]byte, buffLen)
+	actualOutputBuff := make([]byte, buffLen)
+	var expectedLen, actualLen int
+	var err error
 	for {
-		expectLen, err = io.ReadFull(testcaseOutputReader, testcaseOutputBuff)
+		expectedLen, err = io.ReadFull(expected, expectedOutputBuff)
 		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-			judgeRes.Conclusion = model.Conclusion_JudgementFailed
-			return judgeRes, err
+			return false, err
 		}
 
-		actualLen, err = io.ReadFull(executeOutputReader, executeOutputBuff)
+		actualLen, err = io.ReadFull(actual, actualOutputBuff)
 		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-			judgeRes.Conclusion = model.Conclusion_JudgementFailed
-			return judgeRes, err
+			return false, err
 		}
-		judgeRes.OutputSize += uint64(actualLen)
 
-		if actualLen == expectLen+1 {
-			if executeOutputBuff[actualLen-1] == ' ' || executeOutputBuff[actualLen-1] == '\n' {
+		if actualLen == expectedLen+1 {
+			if actualOutputBuff[actualLen-1] == ' ' || actualOutputBuff[actualLen-1] == '\n' {
 				// cut off ' ' or '\n' at the end of executeOutputBuff
 				actualLen--
 			} else {
-				judgeRes.Conclusion = model.Conclusion_WrongAnswer
+				return false, nil
 			}
-		} else if actualLen > expectLen+1 || actualLen < expectLen {
-			judgeRes.Conclusion = model.Conclusion_WrongAnswer
+		} else if actualLen > expectedLen+1 || actualLen < expectedLen {
+			return false, nil
 		}
 
-		if !reflect.DeepEqual(testcaseOutputBuff[:expectLen], executeOutputBuff[:actualLen]) {
-			judgeRes.Conclusion = model.Conclusion_WrongAnswer
+		if !reflect.DeepEqual(expectedOutputBuff[:expectedLen], actualOutputBuff[:actualLen]) {
+			return false, nil
 		}
 
-		if expectLen < buffLen || judgeRes.Conclusion != model.Conclusion_Accepted {
+		if expectedLen < buffLen {
 			break
 		}
 	}
 
-	return judgeRes, nil
+	return true, nil
 }
 
 // func (m *Manager) ExecuteCommand(ctx context.Context, cmd string) string {
