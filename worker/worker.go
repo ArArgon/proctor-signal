@@ -232,12 +232,12 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 
 				// TODO: add Testcase.Score
 				caseResult.Score = subtask.Score / int32(len(subtask.TestCases))
-
-				// Score the subtask tmpeorary
-				if subtask.ScorePolicy == model.ScorePolicy_SUM || subtask.ScorePolicy == model.ScorePolicy_PCT {
-					// If subtask.ScorePolicy == model.ScorePolicy_PCT, the subtaskResult.Score will be rescored after
+				switch subtask.ScorePolicy {
+				case model.ScorePolicy_SUM:
 					subtaskResult.Score += caseResult.Score
-				} else if subtask.ScorePolicy == model.ScorePolicy_MIN {
+				case model.ScorePolicy_PCT:
+					subtaskResult.Score += caseResult.Score / int32(len(subtask.TestCases))
+				case model.ScorePolicy_MIN:
 					if subtaskResult.Score > caseResult.Score {
 						subtaskResult.Score = caseResult.Score
 					}
@@ -251,11 +251,6 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 					}
 				}
 			}
-		}
-
-		// Rescore the subtaskResult
-		if subtask.ScorePolicy == model.ScorePolicy_PCT {
-			subtaskResult.Score /= int32(len(subtask.TestCases))
 		}
 		return true
 	})
