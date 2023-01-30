@@ -8,3 +8,6 @@ insecureGrpc = true
 insecureJwt = true
 httpPrefix = '/api/judge'
 authSecret = 'ss' # should be configured in ENV.
+
+[judgeOptions]
+maxTruncatedOutput = 20480 # 20 KiB
