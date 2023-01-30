@@ -32,26 +32,22 @@ type Manager struct {
 	langConf config.LanguageConf
 }
 
-type CompileRes struct {
-	Status          envexec.Status
-	ExitStatus      int
-	Error           string
-	Stdout          io.Reader
-	Stderr          io.Reader
-	TotalTime       time.Duration
-	TotalSpace      runner.Size
-	ArtifactFileIDs map[string]string
-}
-
 type ExecuteRes struct {
 	Status         envexec.Status
 	ExitStatus     int
 	Error          string
 	Stdout         io.Reader
+	StdoutSize     int64
 	Stderr         io.Reader
+	StderrSize     int64
 	CachedStdoutID string
 	TotalTime      time.Duration
 	TotalSpace     runner.Size
+}
+
+type CompileRes struct {
+	ExecuteRes
+	ArtifactFileIDs map[string]string
 }
 
 type JudgeRes struct {
@@ -114,11 +110,13 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 	})
 
 	compileRes := &CompileRes{
-		Status:     res.Results[0].Status,
-		ExitStatus: res.Results[0].ExitStatus,
-		Error:      res.Results[0].Error,
-		TotalTime:  res.Results[0].RunTime,
-		TotalSpace: res.Results[0].Memory,
+		ExecuteRes: ExecuteRes{
+			Status:     res.Results[0].Status,
+			ExitStatus: res.Results[0].ExitStatus,
+			Error:      res.Results[0].Error,
+			TotalTime:  res.Results[0].RunTime,
+			TotalSpace: res.Results[0].Memory,
+		},
 	}
 
 	_, ok = res.Results[0].FileIDs[compileConf.ArtifactName]
