@@ -156,11 +156,6 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 
 // ExecuteFile execute a runnable file with stdin.
 func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile, copyInFileIDs map[string]string, cacheOutput bool, CPULimit time.Duration, memoryLimit runner.Size) (*ExecuteRes, error) {
-	// name, _ := m.fs.Get(fileID)
-	// if name == "" {
-	// 	return nil, errors.New("failed to get runnable file with id: " + fileID)
-	// }
-
 	workerCmd := worker.Cmd{
 		Env:         []string{"PATH=/usr/bin:/bin"},
 		Args:        strings.Split(cmd, " "),
@@ -258,7 +253,11 @@ func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[
 		judgeRes.Conclusion = model.Conclusion_JudgementFailed
 		return judgeRes, err
 	}
-	executeOutputReader := judgeRes.Output
+	executeOutputReader, err := envexec.FileToReader(f) // can not share with judgeRes.Output
+	if err != nil {
+		judgeRes.Conclusion = model.Conclusion_JudgementFailed
+		return judgeRes, err
+	}
 
 	_, f = m.fs.Get(testcase.OutputKey)
 	testcaseOutputReader, err := envexec.FileToReader(f)
@@ -306,11 +305,6 @@ func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[
 		}
 	}
 
-	judgeRes.Output, err = envexec.FileToReader(f)
-	if err != nil {
-		judgeRes.Conclusion = model.Conclusion_JudgementFailed
-		return judgeRes, err
-	}
 	return judgeRes, nil
 }
 
