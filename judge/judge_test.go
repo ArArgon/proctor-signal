@@ -67,6 +67,17 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+func loadConf() *config.JudgeConfig {
+	var conf judgeconfig.Config
+	if err := conf.Load(); err != nil {
+		if err == flag.ErrHelp {
+			os.Exit(0)
+		}
+		log.Fatalln("load config failed ", err)
+	}
+	return (*config.JudgeConfig)(&conf)
+}
+
 func loadLanguageConfig(configPath string) config.LanguageConf {
 	f, err := os.Open(configPath)
 	defer func() { _ = f.Close() }()
@@ -189,7 +200,7 @@ func TestCompile(t *testing.T) {
 	}
 }
 
-func TestExecuteFile(t *testing.T) {
+func TestExecute(t *testing.T) {
 	p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
 	ctx := context.Background()
 	stdin := "Hello,world.\n" // should not contain space
@@ -221,13 +232,27 @@ func TestExecuteFile(t *testing.T) {
 	}
 }
 
-func loadConf() *config.JudgeConfig {
-	var conf judgeconfig.Config
-	if err := conf.Load(); err != nil {
-		if err == flag.ErrHelp {
-			os.Exit(0)
+func TestJudge(t *testing.T) {
+	p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
+	ctx := context.Background()
+
+	var err error
+	testcase := &model.TestCase{}
+	testcase.InputKey, err = judgeManger.fs.Add("input", "tests/input")
+	assert.NoError(t, err)
+	testcase.OutputKey, err = judgeManger.fs.Add("output", "tests/output")
+	assert.NoError(t, err)
+
+	for language := range languageConfig {
+		// just for C
+		if language != "c" {
+			continue
 		}
-		log.Fatalln("load config failed ", err)
+
+		t.Run(language, func(t *testing.T) {
+			judgeRes, err := judgeManger.Judge(ctx, language, fileCaches[language], testcase, time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit))
+			assert.NoError(t, err)
+			assert.Equal(t, judgeRes.Conclusion, model.Conclusion_Accepted)
+		})
 	}
-	return (*config.JudgeConfig)(&conf)
 }
