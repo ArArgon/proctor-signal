@@ -76,19 +76,36 @@ func TestFileStore(t *testing.T) {
 			file := lo.Must(os.Open(f.(*envexec.FileInput).Path))
 			assert.NotNil(t, file)
 			assert.Equal(t, idToSha[id], fmt.Sprintf("%x", sha1.Sum(lo.Must(io.ReadAll(file)))))
+
+			// GetOsFile
+			file, n, err = fs.GetOsFile(id)
+			assert.NoError(t, err)
+			assert.Equal(t, n, name)
+			assert.Equal(t, idToSha[id], fmt.Sprintf("%x", sha1.Sum(lo.Must(io.ReadAll(file)))))
 		}
 
 		// Remove.
-		lo.RepeatBy(5, func(i int) string {
-			id := ids[i*5]
+		part := lo.Chunk(ids, 5)
+
+		// Remove one each time.
+		for _, id := range part[0] {
 			assert.True(t, fs.Remove(id))
 			delete(idToName, id)
 			delete(idToSha, id)
-			return id
-		})
+		}
+
+		n, err := fs.BulkRemove(part[1])
+		assert.NoError(t, err)
+		assert.Equal(t, n, len(part[1]))
+		for _, id := range part[1] {
+			delete(idToName, id)
+			delete(idToSha, id)
+		}
+
 		assert.Equal(t, idToName, fs.List())
 		// Cannot remove a file twice.
 		assert.False(t, fs.Remove(ids[0]))
+		assert.Equal(t, 0, lo.Must(fs.BulkRemove(part[1])))
 	})
 
 	// Test problem.
@@ -139,6 +156,15 @@ func TestFileStore(t *testing.T) {
 					fmt.Sprintf("%x", sha1.Sum(lo.Must(io.ReadAll(file)))),
 				)
 				assert.NoError(t, file.Close())
+
+				// GetOsFile
+				file, fileKey, err = fs.GetOsFile(p)
+				assert.NoError(t, err)
+				assert.Equal(t, fileKey, f.key)
+				assert.Equal(t,
+					hash[ent.Key()+"/"+f.key],
+					fmt.Sprintf("%x", sha1.Sum(lo.Must(io.ReadAll(file)))),
+				)
 			}
 		}
 
