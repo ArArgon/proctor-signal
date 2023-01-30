@@ -306,6 +306,11 @@ func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[
 		}
 	}
 
+	judgeRes.Output, err = envexec.FileToReader(f)
+	if err != nil {
+		judgeRes.Conclusion = model.Conclusion_JudgementFailed
+		return judgeRes, err
+	}
 	return judgeRes, nil
 }
 
