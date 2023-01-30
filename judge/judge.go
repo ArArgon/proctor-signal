@@ -241,11 +241,6 @@ func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[
 	}
 
 	executeRes, err := m.Execute(ctx, conf.ExecuteCmd, &worker.CachedFile{FileID: testcase.InputKey}, copyInFileIDs, true, CPULimit, memoryLimit)
-	if executeRes == nil {
-		// faild to start execute
-		return nil, err
-	}
-
 	judgeRes := &JudgeRes{
 		ExitStatus: executeRes.ExitStatus,
 		Error:      executeRes.Error,
@@ -266,7 +261,7 @@ func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[
 	executeOutputReader := judgeRes.Output
 
 	_, f = m.fs.Get(testcase.OutputKey)
-	expectedOutputReader, err := envexec.FileToReader(f)
+	testcaseOutputReader, err := envexec.FileToReader(f)
 	if err != nil {
 		judgeRes.Conclusion = model.Conclusion_JudgementFailed
 		return judgeRes, err
@@ -274,11 +269,11 @@ func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[
 
 	buffLen := 1024
 	executeOutputBuff := make([]byte, buffLen)
-	expectedOutputBuff := make([]byte, buffLen)
+	testcaseOutputBuff := make([]byte, buffLen)
 	var expectLen, actualLen int
 	judgeRes.Conclusion = model.Conclusion_Accepted
 	for {
-		expectLen, err = io.ReadFull(expectedOutputReader, expectedOutputBuff)
+		expectLen, err = io.ReadFull(testcaseOutputReader, testcaseOutputBuff)
 		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 			judgeRes.Conclusion = model.Conclusion_JudgementFailed
 			return judgeRes, err
@@ -302,7 +297,7 @@ func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[
 			judgeRes.Conclusion = model.Conclusion_WrongAnswer
 		}
 
-		if !reflect.DeepEqual(expectedOutputBuff[:expectLen], executeOutputBuff[:actualLen]) {
+		if !reflect.DeepEqual(testcaseOutputBuff[:expectLen], executeOutputBuff[:actualLen]) {
 			judgeRes.Conclusion = model.Conclusion_WrongAnswer
 		}
 
