@@ -238,10 +238,13 @@ func TestJudge(t *testing.T) {
 
 	var err error
 	testcase := &model.TestCase{}
-	testcase.InputKey, err = judgeManger.fs.Add("input", "tests/input")
+	f, err := judgeManger.fs.New()
 	assert.NoError(t, err)
-	testcase.OutputKey, err = judgeManger.fs.Add("output", "tests/output")
+	_, err = io.WriteString(f, "Hello,world.\n")
 	assert.NoError(t, err)
+	testcase.InputKey, err = judgeManger.fs.Add("stddin", f.Name())
+	assert.NoError(t, err)
+	testcase.OutputKey = testcase.InputKey
 
 	for language := range languageConfig {
 		// just for C
@@ -252,7 +255,7 @@ func TestJudge(t *testing.T) {
 		t.Run(language, func(t *testing.T) {
 			judgeRes, err := judgeManger.Judge(ctx, language, fileCaches[language], testcase, time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit))
 			assert.NoError(t, err)
-			assert.Equal(t, judgeRes.Conclusion, model.Conclusion_Accepted)
+			assert.Equal(t, model.Conclusion_Accepted, judgeRes.Conclusion)
 		})
 	}
 }
