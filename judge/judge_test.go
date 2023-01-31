@@ -129,6 +129,10 @@ func TestCompile(t *testing.T) {
 			}
 
 			compileRes, err := judgeManger.Compile(ctx, sub)
+			defer func() {
+				_ = compileRes.Stdout.Close()
+				_ = compileRes.Stderr.Close()
+			}()
 			assert.NotNil(t, compileRes)
 			assert.NoError(t, err)
 			if compileRes.ExitStatus != 0 {
@@ -157,6 +161,11 @@ func TestExecute(t *testing.T) {
 				&worker.MemoryFile{Content: []byte(stdin)}, fileCaches[language],
 				time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit),
 			)
+			defer func() {
+				_ = executeRes.Stdout.Close()
+				_ = executeRes.Stderr.Close()
+			}()
+
 			assert.NoError(t, err)
 			if executeRes.ExitStatus != 0 {
 				t.Errorf("failed to execute: executeRes.ExitStatus != 0, executeRes: %+v", executeRes)

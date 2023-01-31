@@ -40,9 +40,9 @@ type ExecuteRes struct {
 	Status     envexec.Status
 	ExitStatus int
 	Error      string
-	Stdout     io.Reader
+	Stdout     io.ReadSeekCloser
 	StdoutSize int64
-	Stderr     io.Reader
+	Stderr     io.ReadSeekCloser
 	StderrSize int64
 	TotalTime  time.Duration
 	TotalSpace runner.Size
@@ -227,6 +227,11 @@ func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[
 	}
 
 	executeRes, err := m.Execute(ctx, conf.ExecuteCmd, &worker.CachedFile{FileID: testcase.InputKey}, copyInFileIDs, CPULimit, memoryLimit)
+	defer func() {
+		_ = executeRes.Stdout.Close()
+		_ = executeRes.Stderr.Close()
+	}()
+
 	judgeRes := &JudgeRes{
 		ExitStatus: executeRes.ExitStatus,
 		Error:      executeRes.Error,

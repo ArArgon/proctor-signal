@@ -151,6 +151,10 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 		return compileErr, err
 	}
 	defer w.judge.RemoveFiles(compileRes.ArtifactFileIDs)
+	defer func() {
+		_ = compileRes.Stdout.Close()
+		_ = compileRes.Stderr.Close()
+	}()
 
 	if err != nil {
 		sugar.With("err", compileRes.Status.String()).Error("failed to finish compile")
