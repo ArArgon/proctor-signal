@@ -137,16 +137,14 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 	var f *os.File
 	f, ok = result.Files["stdout"]
 	if ok {
-		_, err = f.Seek(0, 0)
-		if err != nil {
+		if _, err = f.Seek(0, 0); err != nil {
 			return compileRes, errors.New("failed to reseek compile stdout")
 		}
 		compileRes.Stdout = f
 	}
 	f, ok = result.Files["stderr"]
 	if ok {
-		_, err = f.Seek(0, 0)
-		if err != nil {
+		if _, err = f.Seek(0, 0); err != nil {
 			return compileRes, errors.New("failed to reseek compile stderr")
 		}
 		compileRes.Stderr = f
@@ -194,8 +192,7 @@ func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
 	// read execute output
 	var err error
 	if f, ok := result.Files["stdout"]; ok {
-		_, err = f.Seek(0, 0)
-		if err != nil {
+		if _, err = f.Seek(0, 0); err != nil {
 			return executeRes, errors.New("failed to reseek execute stdout")
 		}
 		executeRes.Stdout = f
@@ -208,8 +205,7 @@ func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
 	}
 
 	if f, ok := result.Files["stderr"]; ok {
-		_, err = f.Seek(0, 0)
-		if err != nil {
+		if _, err = f.Seek(0, 0); err != nil {
 			return executeRes, errors.New("failed to reseek execute stderr")
 		}
 		executeRes.Stderr = f
@@ -265,8 +261,7 @@ func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[
 	// reset executeRes.Stdout
 	f, ok := executeRes.Stdout.(*os.File)
 	if ok {
-		_, err = f.Seek(0, 0)
-		if err != nil {
+		if _, err = f.Seek(0, 0); err != nil {
 			return judgeRes, err
 		}
 
