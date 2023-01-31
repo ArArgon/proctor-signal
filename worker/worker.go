@@ -201,9 +201,10 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 			caseResult.TotalTime = uint32(judgeRes.TotalTime)
 			caseResult.TotalSpace = float32(judgeRes.TotalSpace)
 			caseResult.ReturnValue = int32(judgeRes.ExitStatus)
-			if judgeRes.OutputId != "" {
-				caseResult.OutputKey = judgeRes.OutputId
-				caseResult.OutputSize = judgeRes.OutputSize
+
+			if judgeRes.OutputID != "" {
+				caseResult.OutputKey = judgeRes.OutputID
+				caseResult.OutputSize = uint64(judgeRes.OutputSize)
 
 				bytes := make([]byte, 1024) // 1 KiB
 				_, err := io.ReadFull(judgeRes.Output, bytes)

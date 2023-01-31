@@ -33,16 +33,15 @@ type Manager struct {
 }
 
 type ExecuteRes struct {
-	Status         envexec.Status
-	ExitStatus     int
-	Error          string
-	Stdout         io.Reader
-	StdoutSize     int64
-	Stderr         io.Reader
-	StderrSize     int64
-	CachedStdoutID string
-	TotalTime      time.Duration
-	TotalSpace     runner.Size
+	Status     envexec.Status
+	ExitStatus int
+	Error      string
+	Stdout     io.Reader
+	StdoutSize int64
+	Stderr     io.Reader
+	StderrSize int64
+	TotalTime  time.Duration
+	TotalSpace runner.Size
 }
 
 type CompileRes struct {
@@ -55,8 +54,8 @@ type JudgeRes struct {
 	Error      string
 	Conclusion model.Conclusion
 	Output     io.Reader
-	OutputId   string
-	OutputSize uint64
+	OutputID   string
+	OutputSize int64
 	TotalTime  time.Duration
 	TotalSpace runner.Size
 }
@@ -153,7 +152,7 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 }
 
 // ExecuteFile execute a runnable file with stdin.
-func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile, copyInFileIDs map[string]string, cacheOutput bool, CPULimit time.Duration, memoryLimit runner.Size) (*ExecuteRes, error) {
+func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile, copyInFileIDs map[string]string, CPULimit time.Duration, memoryLimit runner.Size) (*ExecuteRes, error) {
 	workerCmd := worker.Cmd{
 		Env:         []string{"PATH=/usr/bin:/bin"},
 		Args:        strings.Split(cmd, " "),
@@ -165,7 +164,7 @@ func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
 			&worker.Collector{Name: "stdout", Max: 10240},
 			&worker.Collector{Name: "stderr", Max: 10240},
 		},
-		CopyOut: []worker.CmdCopyOutFile{
+		CopyOutCached: []worker.CmdCopyOutFile{
 			{Name: "stdout", Optional: true},
 			{Name: "stderr", Optional: true},
 		},
@@ -176,12 +175,12 @@ func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
 		workerCmd.CopyIn[filename] = &worker.CachedFile{FileID: fileID}
 	}
 
-	cmdCopyOutFile := []worker.CmdCopyOutFile{{Name: "stdout", Optional: true}, {Name: "stderr", Optional: true}}
-	if cacheOutput {
-		workerCmd.CopyOutCached = cmdCopyOutFile
-	} else {
-		workerCmd.CopyOut = cmdCopyOutFile
-	}
+	// cmdCopyOutFile := []worker.CmdCopyOutFile{{Name: "stdout", Optional: true}, {Name: "stderr", Optional: true}}
+	// if cacheOutput {
+	// 	workerCmd.CopyOutCached = cmdCopyOutFile
+	// } else {
+	// 	workerCmd.CopyOut = cmdCopyOutFile
+	// }
 
 	res := <-m.worker.Execute(ctx, &worker.Request{Cmd: []worker.Cmd{workerCmd}})
 	executeRes := &ExecuteRes{
@@ -199,21 +198,27 @@ func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
 	var err error
 	var f *os.File
 	var ok bool
-	if cacheOutput {
-		executeRes.CachedStdoutID, ok = res.Results[0].FileIDs["stdout"]
-		if !ok {
-			return executeRes, errors.New("failed to read execute stdout: " + err.Error())
+	// if cacheOutput {
+	// 	executeRes.CachedStdoutID, ok = res.Results[0].FileIDs["stdout"]
+	// 	if !ok {
+	// 		return executeRes, errors.New("failed to read execute stdout: " + err.Error())
+	// 	}
+	// } else {
+	f, ok = res.Results[0].Files["stdout"]
+	if ok {
+		_, err = f.Seek(0, 0)
+		if err != nil {
+			return executeRes, errors.New("failed to reseek execute stdout")
 		}
-	} else {
-		f, ok = res.Results[0].Files["stdout"]
-		if ok {
-			_, err = f.Seek(0, 0)
-			if err != nil {
-				return executeRes, errors.New("failed to reseek execute stdout")
-			}
-			executeRes.Stdout = f
+		executeRes.Stdout = f
+
+		fi, err := f.Stat()
+		if err != nil {
+			return executeRes, errors.New("failed to read execute stdout info")
 		}
+		executeRes.StdoutSize = fi.Size()
 	}
+	// }
 
 	f, ok = res.Results[0].Files["stderr"]
 	if ok {
@@ -222,6 +227,12 @@ func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
 			return executeRes, errors.New("failed to reseek execute stderr")
 		}
 		executeRes.Stderr = f
+
+		fi, err := f.Stat()
+		if err != nil {
+			return executeRes, errors.New("failed to read execute stderr info")
+		}
+		executeRes.StderrSize = fi.Size()
 	}
 
 	return executeRes, nil
@@ -233,7 +244,7 @@ func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[
 		return nil, fmt.Errorf("config for %s not found", language)
 	}
 
-	executeRes, err := m.Execute(ctx, conf.ExecuteCmd, &worker.CachedFile{FileID: testcase.InputKey}, copyInFileIDs, true, CPULimit, memoryLimit)
+	executeRes, err := m.Execute(ctx, conf.ExecuteCmd, &worker.CachedFile{FileID: testcase.InputKey}, copyInFileIDs, CPULimit, memoryLimit)
 	judgeRes := &JudgeRes{
 		ExitStatus: executeRes.ExitStatus,
 		Error:      executeRes.Error,
@@ -244,21 +255,10 @@ func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[
 		return judgeRes, err
 	}
 
-	judgeRes.OutputId = executeRes.CachedStdoutID
-	_, f := m.fs.Get(judgeRes.OutputId)
-	judgeRes.Output, err = envexec.FileToReader(f)
-	if err != nil {
-		judgeRes.Conclusion = model.Conclusion_JudgementFailed
-		return judgeRes, err
-	}
-	executeOutputReader, err := envexec.FileToReader(f) // can not share with judgeRes.Output
-	if err != nil {
-		judgeRes.Conclusion = model.Conclusion_JudgementFailed
-		return judgeRes, err
-	}
+	executeOutputReader := executeRes.Stdout // Only judge on executeRes.Stdout, ignore executeRes.Stderr
 
-	_, f = m.fs.Get(testcase.OutputKey)
-	testcaseOutputReader, err := envexec.FileToReader(f)
+	_, ef := m.fs.Get(testcase.OutputKey)
+	testcaseOutputReader, err := envexec.FileToReader(ef)
 	if err != nil {
 		judgeRes.Conclusion = model.Conclusion_JudgementFailed
 		return judgeRes, err
@@ -274,6 +274,23 @@ func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[
 		judgeRes.Conclusion = model.Conclusion_Accepted
 	} else {
 		judgeRes.Conclusion = model.Conclusion_WrongAnswer
+	}
+
+	// reset executeRes.Stdout
+	f, ok := executeRes.Stdout.(*os.File)
+	if ok {
+		f.Seek(0, 0)
+		judgeRes.Output = f
+		// Cache executeRes.Stdout as judge output
+		judgeRes.OutputID, err = m.fs.Add("Stdin", f.Name())
+		if err != nil {
+			return judgeRes, err
+		}
+		fi, err := f.Stat()
+		if err != nil {
+			return nil, err
+		}
+		judgeRes.OutputSize = fi.Size()
 	}
 
 	return judgeRes, nil

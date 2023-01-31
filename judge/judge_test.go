@@ -216,7 +216,7 @@ func TestExecute(t *testing.T) {
 			executeRes, err := judgeManger.Execute(ctx,
 				conf.ExecuteCmd,
 				&worker.MemoryFile{Content: []byte(stdin)}, fileCaches[language],
-				false, time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit),
+				time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit),
 			)
 			assert.NoError(t, err)
 			if executeRes.ExitStatus != 0 {
