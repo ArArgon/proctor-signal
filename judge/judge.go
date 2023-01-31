@@ -111,22 +111,22 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 			},
 		}},
 	})
+	result := &res.Results[0]
 
 	compileRes := &CompileRes{
 		ExecuteRes: ExecuteRes{
-			Status:     res.Results[0].Status,
-			ExitStatus: res.Results[0].ExitStatus,
-			Error:      res.Results[0].Error,
-			TotalTime:  res.Results[0].RunTime,
-			TotalSpace: res.Results[0].Memory,
+			Status:     result.Status,
+			ExitStatus: result.ExitStatus,
+			Error:      result.Error,
+			TotalTime:  result.RunTime,
+			TotalSpace: result.Memory,
 		},
 	}
 
-	_, ok = res.Results[0].FileIDs[compileConf.ArtifactName]
-	if !ok {
+	if _, ok = result.FileIDs[compileConf.ArtifactName]; !ok {
 		return compileRes, errors.New("failed to cache ArtifactFile")
 	}
-	compileRes.ArtifactFileIDs = res.Results[0].FileIDs
+	compileRes.ArtifactFileIDs = result.FileIDs
 
 	if res.Error != nil {
 		return compileRes, res.Error
@@ -135,7 +135,7 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 	// read compile output
 	var err error
 	var f *os.File
-	f, ok = res.Results[0].Files["stdout"]
+	f, ok = result.Files["stdout"]
 	if ok {
 		_, err = f.Seek(0, 0)
 		if err != nil {
@@ -143,7 +143,7 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 		}
 		compileRes.Stdout = f
 	}
-	f, ok = res.Results[0].Files["stderr"]
+	f, ok = result.Files["stderr"]
 	if ok {
 		_, err = f.Seek(0, 0)
 		if err != nil {
@@ -179,12 +179,13 @@ func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
 	}
 
 	res := <-m.worker.Execute(ctx, &worker.Request{Cmd: []worker.Cmd{workerCmd}})
+	result := &res.Results[0]
 	executeRes := &ExecuteRes{
-		Status:     res.Results[0].Status,
-		ExitStatus: res.Results[0].ExitStatus,
-		Error:      res.Results[0].Error,
-		TotalTime:  res.Results[0].RunTime,
-		TotalSpace: res.Results[0].Memory,
+		Status:     result.Status,
+		ExitStatus: result.ExitStatus,
+		Error:      result.Error,
+		TotalTime:  result.RunTime,
+		TotalSpace: result.Memory,
 	}
 	if res.Error != nil {
 		return executeRes, res.Error
@@ -192,10 +193,7 @@ func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
 
 	// read execute output
 	var err error
-	var f *os.File
-	var ok bool
-	f, ok = res.Results[0].Files["stdout"]
-	if ok {
+	if f, ok := result.Files["stdout"]; ok {
 		_, err = f.Seek(0, 0)
 		if err != nil {
 			return executeRes, errors.New("failed to reseek execute stdout")
@@ -209,8 +207,7 @@ func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
 		executeRes.StdoutSize = fi.Size()
 	}
 
-	f, ok = res.Results[0].Files["stderr"]
-	if ok {
+	if f, ok := result.Files["stderr"]; ok {
 		_, err = f.Seek(0, 0)
 		if err != nil {
 			return executeRes, errors.New("failed to reseek execute stderr")
