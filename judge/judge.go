@@ -56,14 +56,14 @@ type CompileRes struct {
 }
 
 type JudgeRes struct {
-	ExitStatus int
-	Error      string
-	Conclusion model.Conclusion
-	Output     io.Reader
-	OutputID   string
-	OutputSize int64
-	TotalTime  time.Duration
-	TotalSpace runner.Size
+	ExitStatus      int
+	Error           string
+	Conclusion      model.Conclusion
+	OutputID        string
+	OutputSize      int64
+	TruncatedOutput string
+	TotalTime       time.Duration
+	TotalSpace      runner.Size
 }
 
 //var languageConfig map[string]struct {
@@ -290,7 +290,13 @@ func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[
 			return judgeRes, err
 		}
 
-		judgeRes.Output = f
+		buff := make([]byte, m.judgeOptions.MaxTruncatedOutput)
+		_, err = io.ReadFull(f, buff)
+		if err != nil {
+			return judgeRes, err
+		}
+		judgeRes.TruncatedOutput = string(buff)
+
 		// Cache executeRes.Stdout as judge output
 		judgeRes.OutputID, err = m.fs.Add("Stdin", f.Name())
 		if err != nil {

@@ -256,10 +256,7 @@ func TestJudge(t *testing.T) {
 			judgeRes, err := judgeManger.Judge(ctx, language, fileCaches[language], testcase, time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit))
 			assert.NoError(t, err)
 			assert.Equal(t, model.Conclusion_Accepted, judgeRes.Conclusion)
-
-			bs, err := io.ReadAll(judgeRes.Output)
-			assert.NoError(t, err)
-			assert.Equal(t, "Hello,world.\n", string(bs))
+			assert.Equal(t, "Hello,world.\n", judgeRes.TruncatedOutput)
 		})
 	}
 }
