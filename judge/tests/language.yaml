@@ -1,6 +1,6 @@
 c:
     SourceName: source.c
-    ArtifactName: a.out
+    ArtifactName: main
     CompileCmd: "/usr/bin/gcc source.c"
     CompileTimeLimit: 10000 # ms
     CompileSpaceLimit: 104857600
