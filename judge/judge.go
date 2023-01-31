@@ -164,7 +164,7 @@ func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
 			&worker.Collector{Name: "stdout", Max: 10240},
 			&worker.Collector{Name: "stderr", Max: 10240},
 		},
-		CopyOutCached: []worker.CmdCopyOutFile{
+		CopyOut: []worker.CmdCopyOutFile{
 			{Name: "stdout", Optional: true},
 			{Name: "stderr", Optional: true},
 		},
