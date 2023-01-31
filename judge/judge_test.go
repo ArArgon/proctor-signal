@@ -187,7 +187,7 @@ func TestCompile(t *testing.T) {
 		t.Run(language, func(t *testing.T) {
 			codes, err := os.ReadFile("tests/" + conf.SourceName)
 			assert.NoError(t, err)
-			sub := &model.Submission{Language: language, SourceCode: codes}
+			sub := &model.Submission{Language: language, SourceCode: codes, CompilerOption: "o"}
 
 			compileRes, err := judgeManger.Compile(ctx, sub)
 			assert.NotNil(t, compileRes)

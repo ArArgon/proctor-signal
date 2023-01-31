@@ -92,7 +92,7 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 	res := <-m.worker.Execute(ctx, &worker.Request{
 		Cmd: []worker.Cmd{{
 			Env:         []string{"PATH=/usr/bin:/bin", "SourceName=" + compileConf.SourceName, "ArtifactName=" + compileConf.ArtifactName},
-			Args:        strings.Split(compileConf.CompileCmd, " "),
+			Args:        strings.Split(compileConf.CompileCmd+" "+compileConf.Options[sub.CompilerOption], " "),
 			CPULimit:    time.Duration(compileConf.CompileTimeLimit * 1000000),
 			MemoryLimit: runner.Size(compileConf.CompileSpaceLimit),
 			ProcLimit:   50,
@@ -157,7 +157,7 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 	return compileRes, nil
 }
 
-// ExecuteFile execute a runnable file with stdin.
+// ExecuteFile execute cmd with stdin and copyIn files.
 func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile, copyInFileIDs map[string]string, CPULimit time.Duration, memoryLimit runner.Size) (*ExecuteRes, error) {
 	workerCmd := worker.Cmd{
 		Env:         []string{"PATH=/usr/bin:/bin"},
