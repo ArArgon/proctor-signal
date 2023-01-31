@@ -19,11 +19,10 @@ import (
 	"github.com/criyle/go-sandbox/runner"
 )
 
-func NewJudgeManager(worker worker.Worker, langConf config.LanguageConf, judgeOptions JudgeOptions) *Manager {
+func NewJudgeManager(worker worker.Worker, conf *config.Config) *Manager {
 	return &Manager{
-		worker:       worker,
-		langConf:     langConf,
-		judgeOptions: judgeOptions,
+		worker: worker,
+		conf:   conf,
 	}
 }
 
@@ -32,10 +31,9 @@ type JudgeOptions struct {
 }
 
 type Manager struct {
-	worker       worker.Worker
-	fs           *resource.FileStore // share with worker
-	langConf     config.LanguageConf
-	judgeOptions JudgeOptions
+	worker worker.Worker
+	fs     *resource.FileStore // share with worker
+	conf   *config.Config
 }
 
 type ExecuteRes struct {
@@ -84,7 +82,7 @@ func (m *Manager) RemoveFiles(fileIDs map[string]string) {
 
 func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileRes, error) {
 	// TODO: compile options
-	compileConf, ok := m.langConf[sub.Language]
+	compileConf, ok := m.conf.LanguageConf[sub.Language]
 	if !ok {
 		return nil, fmt.Errorf("compile config for %s not found", sub.Language)
 	}
@@ -230,7 +228,7 @@ func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
 }
 
 func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[string]string, testcase *model.TestCase, CPULimit time.Duration, memoryLimit runner.Size) (*JudgeRes, error) {
-	conf, ok := m.langConf[language]
+	conf, ok := m.conf.LanguageConf[language]
 	if !ok {
 		return nil, fmt.Errorf("config for %s not found", language)
 	}
@@ -275,7 +273,7 @@ func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[
 			return judgeRes, err
 		}
 
-		buff := make([]byte, m.judgeOptions.MaxTruncatedOutput)
+		buff := make([]byte, m.conf.JudgeOptions.MaxTruncatedOutput)
 		buffLen, err := io.ReadFull(f, buff)
 		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 			return judgeRes, err
