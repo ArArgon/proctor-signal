@@ -175,18 +175,10 @@ func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
 			{Name: "stderr", Optional: true},
 		},
 	}
-
 	workerCmd.CopyIn = make(map[string]worker.CmdFile)
 	for filename, fileID := range copyInFileIDs {
 		workerCmd.CopyIn[filename] = &worker.CachedFile{FileID: fileID}
 	}
-
-	// cmdCopyOutFile := []worker.CmdCopyOutFile{{Name: "stdout", Optional: true}, {Name: "stderr", Optional: true}}
-	// if cacheOutput {
-	// 	workerCmd.CopyOutCached = cmdCopyOutFile
-	// } else {
-	// 	workerCmd.CopyOut = cmdCopyOutFile
-	// }
 
 	res := <-m.worker.Execute(ctx, &worker.Request{Cmd: []worker.Cmd{workerCmd}})
 	executeRes := &ExecuteRes{
@@ -204,12 +196,6 @@ func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
 	var err error
 	var f *os.File
 	var ok bool
-	// if cacheOutput {
-	// 	executeRes.CachedStdoutID, ok = res.Results[0].FileIDs["stdout"]
-	// 	if !ok {
-	// 		return executeRes, errors.New("failed to read execute stdout: " + err.Error())
-	// 	}
-	// } else {
 	f, ok = res.Results[0].Files["stdout"]
 	if ok {
 		_, err = f.Seek(0, 0)
@@ -224,7 +210,6 @@ func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
 		}
 		executeRes.StdoutSize = fi.Size()
 	}
-	// }
 
 	f, ok = res.Results[0].Files["stderr"]
 	if ok {
@@ -352,34 +337,3 @@ func compare(expected, actual io.Reader, buffLen int) (bool, error) {
 
 	return true, nil
 }
-
-// func (m *Manager) ExecuteCommand(ctx context.Context, cmd string) string {
-// 	res := <-m.worker.Execute(ctx, &worker.Request{
-// 		Cmd: []worker.Cmd{{
-// 			Env:         []string{"PATH=/usr/bin:/bin"},
-// 			Args:        strings.Split(cmd, " "),
-// 			CPULimit:    time.Second,
-// 			MemoryLimit: 104857600,
-// 			ProcLimit:   50,
-// 			Files: []worker.CmdFile{
-// 				&worker.MemoryFile{Content: []byte("")},
-// 				&worker.Collector{Name: "stdout", Max: 10240},
-// 				&worker.Collector{Name: "stderr", Max: 10240},
-// 			},
-// 			CopyOut: []worker.CmdCopyOutFile{
-// 				{Name: "stdout", Optional: true},
-// 				{Name: "stderr", Optional: true},
-// 			},
-// 		}},
-// 	})
-
-// 	files := res.Results[0].Files
-
-// 	fmt.Printf(
-// 		"stdout: %s\nstderr: %s",
-// 		lo.Must(io.ReadAll(files["stdout"])),
-// 		lo.Must(io.ReadAll(files["stderr"])),
-// 	)
-
-// 	return fmt.Sprintf("%+v", res)
-// }
