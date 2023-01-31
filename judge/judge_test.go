@@ -60,11 +60,10 @@ func TestMain(m *testing.M) {
 	goJudgeWorker := gojudge.NewWorker(conf, envPool, fs)
 
 	// init judgeManger
-	judgeConf := lo.Must(config.LoadConf("../conf/signal.toml", "../conf/language.toml"))
-	judgeConf.LanguageConf["c"].Options["o"] = "-o main" // for option test
+	judgeConf := lo.Must(config.LoadConf("../conf/signal.toml", "test/language.toml"))
 	languageConfig = judgeConf.LanguageConf
 
-	languageConfig = loadLanguageConfig("tests/language.yaml")
+	// languageConfig = loadLanguageConfig("tests/language.yaml")
 	// judgeConf := &config.Config{
 	// 	LanguageConf: languageConfig,
 	// 	JudgeOptions: JudgeOptions{
