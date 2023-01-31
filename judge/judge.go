@@ -19,17 +19,23 @@ import (
 	"github.com/criyle/go-sandbox/runner"
 )
 
-func NewJudgeManager(worker worker.Worker, langConf config.LanguageConf) *Manager {
+func NewJudgeManager(worker worker.Worker, langConf config.LanguageConf, judgeOptions JudgeOptions) *Manager {
 	return &Manager{
-		worker:   worker,
-		langConf: langConf,
+		worker:       worker,
+		langConf:     langConf,
+		judgeOptions: judgeOptions,
 	}
 }
 
+type JudgeOptions struct {
+	MaxTruncatedOutput uint `default:"10240"`
+}
+
 type Manager struct {
-	worker   worker.Worker
-	fs       *resource.FileStore // share with worker
-	langConf config.LanguageConf
+	worker       worker.Worker
+	fs           *resource.FileStore // share with worker
+	langConf     config.LanguageConf
+	judgeOptions JudgeOptions
 }
 
 type ExecuteRes struct {
@@ -279,7 +285,11 @@ func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[
 	// reset executeRes.Stdout
 	f, ok := executeRes.Stdout.(*os.File)
 	if ok {
-		f.Seek(0, 0)
+		_, err = f.Seek(0, 0)
+		if err != nil {
+			return judgeRes, err
+		}
+
 		judgeRes.Output = f
 		// Cache executeRes.Stdout as judge output
 		judgeRes.OutputID, err = m.fs.Add("Stdin", f.Name())
