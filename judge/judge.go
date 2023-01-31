@@ -292,7 +292,7 @@ func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[
 
 		buff := make([]byte, m.judgeOptions.MaxTruncatedOutput)
 		_, err = io.ReadFull(f, buff)
-		if err != nil {
+		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 			return judgeRes, err
 		}
 		judgeRes.TruncatedOutput = string(buff)
