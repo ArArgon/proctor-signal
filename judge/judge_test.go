@@ -61,7 +61,7 @@ func TestMain(m *testing.M) {
 
 	// init judgeManger
 	languageConfig = loadLanguageConfig("tests/language.yaml")
-	judgeManger = NewJudgeManager(goJudgeWorker, languageConfig)
+	judgeManger = NewJudgeManager(goJudgeWorker, languageConfig, JudgeOptions{MaxTruncatedOutput: 20480})
 	judgeManger.fs = fs
 
 	os.Exit(m.Run())
