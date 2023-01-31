@@ -60,13 +60,17 @@ func TestMain(m *testing.M) {
 	goJudgeWorker := gojudge.NewWorker(conf, envPool, fs)
 
 	// init judgeManger
+	judgeConf := lo.Must(config.LoadConf("../conf/signal.toml", "../conf/language.toml"))
+	judgeConf.LanguageConf["c"].Options["o"] = "-o main" // for option test
+	languageConfig = judgeConf.LanguageConf
+
 	languageConfig = loadLanguageConfig("tests/language.yaml")
-	judgeConf := &config.Config{
-		LanguageConf: languageConfig,
-		JudgeOptions: JudgeOptions{
-			MaxTruncatedOutput: 20480,
-		},
-	}
+	// judgeConf := &config.Config{
+	// 	LanguageConf: languageConfig,
+	// 	JudgeOptions: JudgeOptions{
+	// 		MaxTruncatedOutput: 20480,
+	// 	},
+	// }
 	judgeManger = NewJudgeManager(goJudgeWorker, judgeConf)
 	judgeManger.fs = fs
 
@@ -117,7 +121,13 @@ func TestCompile(t *testing.T) {
 		t.Run(language, func(t *testing.T) {
 			codes, err := os.ReadFile("tests/" + conf.SourceName)
 			assert.NoError(t, err)
-			sub := &model.Submission{Language: language, SourceCode: codes, CompilerOption: "o"}
+
+			var sub *model.Submission
+			if language == "c" {
+				sub = &model.Submission{Language: language, SourceCode: codes, CompilerOption: "o"}
+			} else {
+				sub = &model.Submission{Language: language, SourceCode: codes}
+			}
 
 			compileRes, err := judgeManger.Compile(ctx, sub)
 			assert.NotNil(t, compileRes)
