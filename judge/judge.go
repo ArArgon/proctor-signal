@@ -123,11 +123,6 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 		},
 	}
 
-	if _, ok = result.FileIDs[compileConf.ArtifactName]; !ok {
-		return compileRes, errors.New("failed to cache ArtifactFile")
-	}
-	compileRes.ArtifactFileIDs = result.FileIDs
-
 	if res.Error != nil {
 		return compileRes, res.Error
 	}
@@ -149,6 +144,12 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 		}
 		compileRes.Stderr = f
 	}
+
+	// cache files
+	if _, ok = result.FileIDs[compileConf.ArtifactName]; !ok {
+		return compileRes, errors.New("failed to cache ArtifactFile")
+	}
+	compileRes.ArtifactFileIDs = result.FileIDs
 
 	return compileRes, nil
 }
