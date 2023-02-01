@@ -61,14 +61,6 @@ func TestMain(m *testing.M) {
 	// init judgeManger
 	judgeConf := lo.Must(config.LoadConf("../conf/signal.toml", "tests/language.toml"))
 	languageConfig = judgeConf.LanguageConf
-
-	// languageConfig = loadLanguageConfig("tests/language.yaml")
-	// judgeConf := &config.Config{
-	// 	LanguageConf: languageConfig,
-	// 	JudgeOptions: JudgeOptions{
-	// 		MaxTruncatedOutput: 20480,
-	// 	},
-	// }
 	judgeManger = NewJudgeManager(goJudgeWorker, judgeConf)
 	judgeManger.fs = fs
 
@@ -85,23 +77,6 @@ func loadConf() *config.JudgeConfig {
 	}
 	return (*config.JudgeConfig)(&conf)
 }
-
-// func loadLanguageConfig(configPath string) config.LanguageConf {
-// 	f, err := os.Open(configPath)
-// 	defer func() { _ = f.Close() }()
-
-// 	if err != nil {
-// 		fmt.Printf("err: %v\n", err)
-// 		panic("fail to open language config")
-// 	}
-// 	res := make(config.LanguageConf)
-// 	err = yaml.NewDecoder(f).Decode(&res)
-// 	if err != nil {
-// 		fmt.Printf("err: %v\n", err)
-// 		panic("fail to decode language config")
-// 	}
-// 	return res
-// }
 
 var fileCaches map[string]map[string]string
 
