@@ -246,13 +246,13 @@ func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[
 	_, ef := m.fs.Get(testcase.OutputKey)
 	testcaseOutputReader, err := envexec.FileToReader(ef)
 	if err != nil {
-		judgeRes.Conclusion = model.Conclusion_JudgementFailed
+		judgeRes.Conclusion = model.Conclusion_InternalError
 		return judgeRes, err
 	}
 
 	ok, err = compare(testcaseOutputReader, executeRes.Stdout, 1024) // Only judge on executeRes.Stdout, ignore executeRes.Stderr
 	if err != nil {
-		judgeRes.Conclusion = model.Conclusion_JudgementFailed
+		judgeRes.Conclusion = model.Conclusion_InternalError
 		return judgeRes, err
 	}
 
