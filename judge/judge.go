@@ -271,15 +271,16 @@ func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[
 	var buff []byte
 	if executeRes.StdoutSize > int64(m.conf.JudgeOptions.MaxTruncatedOutput) {
 		buff = make([]byte, m.conf.JudgeOptions.MaxTruncatedOutput)
+		judgeRes.OutputSize = int64(m.conf.JudgeOptions.MaxTruncatedOutput)
 	} else {
 		buff = make([]byte, executeRes.StdoutSize)
+		judgeRes.OutputSize = executeRes.StdoutSize
 	}
 
 	if _, err = io.ReadFull(executeRes.Stdout, buff); err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 		return judgeRes, err
 	}
 	judgeRes.TruncatedOutput = string(buff)
-	judgeRes.OutputSize = executeRes.StdoutSize
 
 	// Cache executeRes.Stdout as judge output
 	f, ok := executeRes.Stdout.(*os.File)
