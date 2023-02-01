@@ -14,7 +14,7 @@ CompileCmd = "/usr/bin/gcc source.cpp -o a.out"
 CompileTimeLimit = 10000 # ms
 CompileSpaceLimit = 104857600
 ExecuteCmd = "a.out"
-Options = {o = "-o main"} # for options test
+Options = {  o = "-o main"} # for options test
 
 
 [languageConf.java]

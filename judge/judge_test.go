@@ -13,7 +13,6 @@ import (
 	"github.com/samber/lo"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"gopkg.in/yaml.v3"
 
 	judgeconfig "github.com/criyle/go-judge/cmd/executorserver/config"
 	"github.com/criyle/go-judge/worker"
@@ -87,22 +86,22 @@ func loadConf() *config.JudgeConfig {
 	return (*config.JudgeConfig)(&conf)
 }
 
-func loadLanguageConfig(configPath string) config.LanguageConf {
-	f, err := os.Open(configPath)
-	defer func() { _ = f.Close() }()
+// func loadLanguageConfig(configPath string) config.LanguageConf {
+// 	f, err := os.Open(configPath)
+// 	defer func() { _ = f.Close() }()
 
-	if err != nil {
-		fmt.Printf("err: %v\n", err)
-		panic("fail to open language config")
-	}
-	res := make(config.LanguageConf)
-	err = yaml.NewDecoder(f).Decode(&res)
-	if err != nil {
-		fmt.Printf("err: %v\n", err)
-		panic("fail to decode language config")
-	}
-	return res
-}
+// 	if err != nil {
+// 		fmt.Printf("err: %v\n", err)
+// 		panic("fail to open language config")
+// 	}
+// 	res := make(config.LanguageConf)
+// 	err = yaml.NewDecoder(f).Decode(&res)
+// 	if err != nil {
+// 		fmt.Printf("err: %v\n", err)
+// 		panic("fail to decode language config")
+// 	}
+// 	return res
+// }
 
 var fileCaches map[string]map[string]string
 
@@ -123,6 +122,7 @@ func TestCompile(t *testing.T) {
 
 			var sub *model.Submission
 			if language == "c" {
+				assert.Equal(t, "-o main", conf.Options["o"])
 				sub = &model.Submission{Language: language, SourceCode: codes, CompilerOption: "o"}
 			} else {
 				sub = &model.Submission{Language: language, SourceCode: codes}
