@@ -243,8 +243,6 @@ func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[
 		return judgeRes, err
 	}
 
-	executeOutputReader := executeRes.Stdout // Only judge on executeRes.Stdout, ignore executeRes.Stderr
-
 	_, ef := m.fs.Get(testcase.OutputKey)
 	testcaseOutputReader, err := envexec.FileToReader(ef)
 	if err != nil {
@@ -252,7 +250,7 @@ func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[
 		return judgeRes, err
 	}
 
-	ok, err = compare(testcaseOutputReader, executeOutputReader, 1024)
+	ok, err = compare(testcaseOutputReader, executeRes.Stdout, 1024) // Only judge on executeRes.Stdout, ignore executeRes.Stderr
 	if err != nil {
 		judgeRes.Conclusion = model.Conclusion_JudgementFailed
 		return judgeRes, err
@@ -265,29 +263,31 @@ func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[
 	}
 
 	// reset executeRes.Stdout
+	if _, err = executeRes.Stdout.Seek(0, 0); err != nil {
+		return judgeRes, err
+	}
+
+	// read judge output
+	var buff []byte
+	if executeRes.StdoutSize > int64(m.conf.JudgeOptions.MaxTruncatedOutput) {
+		buff = make([]byte, m.conf.JudgeOptions.MaxTruncatedOutput)
+	} else {
+		buff = make([]byte, executeRes.StdoutSize)
+	}
+
+	if _, err = io.ReadFull(executeRes.Stdout, buff); err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+		return judgeRes, err
+	}
+	judgeRes.TruncatedOutput = string(buff)
+	judgeRes.OutputSize = executeRes.StdoutSize
+
+	// Cache executeRes.Stdout as judge output
 	f, ok := executeRes.Stdout.(*os.File)
 	if ok {
-		if _, err = f.Seek(0, 0); err != nil {
-			return judgeRes, err
-		}
-
-		buff := make([]byte, m.conf.JudgeOptions.MaxTruncatedOutput)
-		buffLen, err := io.ReadFull(f, buff)
-		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-			return judgeRes, err
-		}
-		judgeRes.TruncatedOutput = string(buff[:buffLen])
-
-		// Cache executeRes.Stdout as judge output
 		judgeRes.OutputID, err = m.fs.Add("Stdin", f.Name())
 		if err != nil {
 			return judgeRes, err
 		}
-		fi, err := f.Stat()
-		if err != nil {
-			return nil, err
-		}
-		judgeRes.OutputSize = fi.Size()
 	}
 
 	return judgeRes, nil
