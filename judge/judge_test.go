@@ -60,7 +60,7 @@ func TestMain(m *testing.M) {
 	goJudgeWorker := gojudge.NewWorker(conf, envPool, fs)
 
 	// init judgeManger
-	judgeConf := lo.Must(config.LoadConf("../conf/signal.toml", "test/language.toml"))
+	judgeConf := lo.Must(config.LoadConf("../conf/signal.toml", "tests/language.toml"))
 	languageConfig = judgeConf.LanguageConf
 
 	// languageConfig = loadLanguageConfig("tests/language.yaml")
@@ -130,8 +130,13 @@ func TestCompile(t *testing.T) {
 
 			compileRes, err := judgeManger.Compile(ctx, sub)
 			defer func() {
-				_ = compileRes.Stdout.Close()
-				_ = compileRes.Stderr.Close()
+				if compileRes.Stdout != nil {
+					_ = compileRes.Stdout.Close()
+				}
+				if compileRes.Stderr != nil {
+					_ = compileRes.Stderr.Close()
+
+				}
 			}()
 			assert.NotNil(t, compileRes)
 			assert.NoError(t, err)
