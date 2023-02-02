@@ -10,7 +10,7 @@ Options = {  o2 = "-O2", cpp14 = "--std=c++14" }
 [languageConf.c]
 SourceName = 'source.c'
 ArtifactName = 'a.out'
-CompileCmd = "/usr/bin/gcc source.c -o a.out"
+CompileCmd = "/usr/bin/gcc source.c"
 CompileTimeLimit = 10000 # ms
 CompileSpaceLimit = 104857600
 ExecuteCmd = "a.out"

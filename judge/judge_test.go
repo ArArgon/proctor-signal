@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/criyle/go-judge/envexec"
 	"github.com/samber/lo"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -61,8 +62,7 @@ func TestMain(m *testing.M) {
 	// init judgeManger
 	judgeConf := lo.Must(config.LoadConf("../conf/signal.toml", "tests/language.toml"))
 	languageConfig = judgeConf.LanguageConf
-	judgeManger = NewJudgeManager(goJudgeWorker, judgeConf)
-	judgeManger.fs = fs
+	judgeManger = NewJudgeManager(goJudgeWorker, judgeConf, fs, logger)
 
 	os.Exit(m.Run())
 }
@@ -115,7 +115,7 @@ func TestCompile(t *testing.T) {
 			}()
 			assert.NotNil(t, compileRes)
 			assert.NoError(t, err)
-			if compileRes.ExitStatus != 0 {
+			if compileRes.Status != envexec.StatusAccepted {
 				t.Errorf("failed to finish compile: compileRes.Status != 0, compileRes: %+v", compileRes)
 			}
 			fileCaches[language] = compileRes.ArtifactFileIDs
@@ -181,7 +181,10 @@ func TestJudge(t *testing.T) {
 		}
 
 		t.Run(language, func(t *testing.T) {
-			judgeRes, err := judgeManger.Judge(ctx, language, fileCaches[language], testcase, time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit))
+			judgeRes, err := judgeManger.Judge(
+				ctx, nil, language, fileCaches[language], testcase,
+				time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit),
+			)
 			assert.NoError(t, err)
 			assert.Equal(t, model.Conclusion_Accepted, judgeRes.Conclusion)
 			assert.Equal(t, "Hello,world.\n", judgeRes.TruncatedOutput)

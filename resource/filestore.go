@@ -100,7 +100,7 @@ func (m *FileStore) saveProblem(ent *entry, readers []*sourceReader) error {
 	for _, r := range readers {
 		var f *os.File
 		resPath := path.Join(loc, sha(r.key))
-		fileKey := ent.Key() + "/" + r.key
+		fileKey := resStoreKey(ent, r.key)
 		var written int64
 
 		f, err = os.OpenFile(resPath, os.O_CREATE|os.O_RDWR|os.O_EXCL, 0644)
@@ -124,7 +124,7 @@ func (m *FileStore) saveProblem(ent *entry, readers []*sourceReader) error {
 			return errors.WithMessagef(err, "failed to save file %s", resPath)
 		}
 
-		if r.size != -1 && written != r.size {
+		if r.size >= 0 && written != r.size {
 			sugar.Errorf("unexpected file size, written: %d, expecting: %d", written, r.size)
 			return errors.Errorf("unexpected file size, written: %d, expecting: %d", written, r.size)
 		}

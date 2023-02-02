@@ -10,6 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/samber/lo"
+	"go.uber.org/zap"
+
 	"proctor-signal/config"
 	"proctor-signal/model"
 	"proctor-signal/resource"
@@ -19,10 +22,14 @@ import (
 	"github.com/criyle/go-sandbox/runner"
 )
 
-func NewJudgeManager(worker worker.Worker, conf *config.Config) *Manager {
+func NewJudgeManager(
+	worker worker.Worker, conf *config.Config, fs *resource.FileStore, logger *zap.Logger,
+) *Manager {
 	return &Manager{
+		fs:     fs,
 		worker: worker,
 		conf:   conf,
+		logger: logger,
 	}
 }
 
@@ -34,6 +41,7 @@ type Manager struct {
 	worker worker.Worker
 	fs     *resource.FileStore // share with worker
 	conf   *config.Config
+	logger *zap.Logger
 }
 
 type ExecuteRes struct {
@@ -75,22 +83,29 @@ type JudgeRes struct {
 //}
 
 func (m *Manager) RemoveFiles(fileIDs map[string]string) {
-	for _, v := range fileIDs {
-		m.fs.Remove(v)
+	_, err := m.fs.BulkRemove(lo.Values(fileIDs))
+	if err != nil {
+		m.logger.Sugar().With("err", err).Error("failed to remove files: %+v", fileIDs)
 	}
 }
 
 func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileRes, error) {
 	// TODO: compile options
+	sub.Language = "c"
 	compileConf, ok := m.conf.LanguageConf[sub.Language]
 	if !ok {
 		return nil, fmt.Errorf("compile config for %s not found", sub.Language)
 	}
 
+	args := lo.Filter(
+		strings.Split(compileConf.CompileCmd+" "+compileConf.Options[sub.CompilerOption], " "),
+		func(str string, _ int) bool { return str != "" },
+	)
+
 	res := <-m.worker.Execute(ctx, &worker.Request{
 		Cmd: []worker.Cmd{{
 			Env:         []string{"PATH=/usr/bin:/bin", "SourceName=" + compileConf.SourceName, "ArtifactName=" + compileConf.ArtifactName},
-			Args:        strings.Split(compileConf.CompileCmd+" "+compileConf.Options[sub.CompilerOption], " "),
+			Args:        args,
 			CPULimit:    time.Duration(compileConf.CompileTimeLimit * 1000000),
 			MemoryLimit: runner.Size(compileConf.CompileSpaceLimit),
 			ProcLimit:   50,
@@ -106,8 +121,8 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 				{Name: compileConf.ArtifactName, Optional: true},
 			},
 			CopyOut: []worker.CmdCopyOutFile{
-				{Name: "stdout", Optional: true},
-				{Name: "stderr", Optional: true},
+				{Name: "stdout"},
+				{Name: "stderr"},
 			},
 		}},
 	})
@@ -132,24 +147,24 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 	var f *os.File
 	f, ok = result.Files["stdout"]
 	if ok {
+		compileRes.Stdout = f
 		if _, err = f.Seek(0, 0); err != nil {
 			return compileRes, errors.New("failed to reseek compile stdout")
 		}
-		compileRes.Stdout = f
 	}
 	f, ok = result.Files["stderr"]
 	if ok {
+		compileRes.Stderr = f
 		if _, err = f.Seek(0, 0); err != nil {
 			return compileRes, errors.New("failed to reseek compile stderr")
 		}
-		compileRes.Stderr = f
 	}
 
 	// cache files
-	if _, ok = result.FileIDs[compileConf.ArtifactName]; !ok {
+	compileRes.ArtifactFileIDs = result.FileIDs
+	if _, ok = result.FileIDs[compileConf.ArtifactName]; !ok && result.Status == envexec.StatusAccepted {
 		return compileRes, errors.New("failed to cache ArtifactFile")
 	}
-	compileRes.ArtifactFileIDs = result.FileIDs
 
 	return compileRes, nil
 }
@@ -178,6 +193,10 @@ func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
 	}
 
 	res := <-m.worker.Execute(ctx, &worker.Request{Cmd: []worker.Cmd{workerCmd}})
+	if res.Error != nil {
+		return nil, res.Error
+	}
+
 	result := &res.Results[0]
 	executeRes := &ExecuteRes{
 		Status:     result.Status,
@@ -185,9 +204,6 @@ func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
 		Error:      result.Error,
 		TotalTime:  result.RunTime,
 		TotalSpace: result.Memory,
-	}
-	if res.Error != nil {
-		return executeRes, res.Error
 	}
 
 	// read execute output
@@ -221,13 +237,32 @@ func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
 	return executeRes, nil
 }
 
-func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[string]string, testcase *model.TestCase, CPULimit time.Duration, memoryLimit runner.Size) (*JudgeRes, error) {
+func fsKey(p *model.Problem, key string) string {
+	binFileKey := key
+	if p != nil {
+		binFileKey = resource.ResKey(p, binFileKey)
+	}
+
+	return binFileKey
+}
+
+func (m *Manager) Judge(
+	ctx context.Context, p *model.Problem, language string, copyInFileIDs map[string]string,
+	testcase *model.TestCase, CPULimit time.Duration, memoryLimit runner.Size,
+) (*JudgeRes, error) {
 	conf, ok := m.conf.LanguageConf[language]
 	if !ok {
 		return nil, fmt.Errorf("config for %s not found", language)
 	}
 
-	executeRes, err := m.Execute(ctx, conf.ExecuteCmd, &worker.CachedFile{FileID: testcase.InputKey}, copyInFileIDs, CPULimit, memoryLimit)
+	executeRes, err := m.Execute(
+		ctx, conf.ExecuteCmd, &worker.CachedFile{FileID: fsKey(p, testcase.InputKey)},
+		copyInFileIDs, CPULimit, memoryLimit,
+	)
+	if executeRes == nil {
+		return nil, err
+	}
+
 	defer func() {
 		_ = executeRes.Stdout.Close()
 		_ = executeRes.Stderr.Close()
@@ -243,7 +278,11 @@ func (m *Manager) Judge(ctx context.Context, language string, copyInFileIDs map[
 		return judgeRes, err
 	}
 
-	_, ef := m.fs.Get(testcase.OutputKey)
+	if executeRes.Status != envexec.StatusAccepted {
+		return judgeRes, nil
+	}
+
+	_, ef := m.fs.Get(fsKey(p, testcase.OutputKey))
 	testcaseOutputReader, err := envexec.FileToReader(ef)
 	if err != nil {
 		judgeRes.Conclusion = model.Conclusion_InternalError
