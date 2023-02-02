@@ -13,7 +13,6 @@ import (
 	"github.com/samber/lo"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"gopkg.in/yaml.v3"
 
 	judgeconfig "github.com/criyle/go-judge/cmd/executorserver/config"
 	"github.com/criyle/go-judge/worker"
@@ -60,99 +59,31 @@ func TestMain(m *testing.M) {
 	goJudgeWorker := gojudge.NewWorker(conf, envPool, fs)
 
 	// init judgeManger
-	languageConfig = loadLanguageConfig("tests/language.yaml")
-	judgeManger = NewJudgeManager(goJudgeWorker, languageConfig)
+	judgeConf := lo.Must(config.LoadConf("../conf/signal.toml", "tests/language.toml"))
+	languageConfig = judgeConf.LanguageConf
+	judgeManger = NewJudgeManager(goJudgeWorker, judgeConf)
 	judgeManger.fs = fs
 
 	os.Exit(m.Run())
 }
 
-func loadLanguageConfig(configPath string) config.LanguageConf {
-	f, err := os.Open(configPath)
-	defer func() { _ = f.Close() }()
-
-	if err != nil {
-		fmt.Printf("err: %v\n", err)
-		panic("fail to open language config")
+func loadConf() *config.JudgeConfig {
+	var conf judgeconfig.Config
+	if err := conf.Load(); err != nil {
+		if err == flag.ErrHelp {
+			os.Exit(0)
+		}
+		log.Fatalln("load config failed ", err)
 	}
-	res := make(config.LanguageConf)
-	err = yaml.NewDecoder(f).Decode(&res)
-	if err != nil {
-		fmt.Printf("err: %v\n", err)
-		panic("fail to decode language config")
-	}
-	return res
+	return (*config.JudgeConfig)(&conf)
 }
 
-// func TestWokerExecute(t *testing.T) {
-// 	ctx := context.Background()
-
-// 	res := <-judgeManger.worker.Execute(ctx, &worker.Request{
-// 		Cmd: []worker.Cmd{{
-// 			Env:         []string{"PATH=/usr/bin:/bin"},
-// 			Args:        []string{"cat", "tmp.txt"},
-// 			CPULimit:    time.Second,
-// 			MemoryLimit: 104857600,
-// 			ProcLimit:   50,
-// 			Files: []worker.CmdFile{
-// 				&worker.MemoryFile{Content: []byte("")},
-// 				&worker.Collector{Name: "stdout", Max: 10240},
-// 				&worker.Collector{Name: "stderr", Max: 10240},
-// 			},
-// 			CopyIn: map[string]worker.CmdFile{
-// 				"tmp.txt": &worker.MemoryFile{Content: []byte("114514")},
-// 			},
-// 			CopyOut: []worker.CmdCopyOutFile{
-// 				{Name: "stdout", Optional: true},
-// 				{Name: "stderr", Optional: true},
-// 			},
-// 			CopyOutCached: []worker.CmdCopyOutFile{
-// 				{Name: "tmp.txt", Optional: true},
-// 			},
-// 		}},
-// 	})
-
-// 	executeRes := &ExecuteRes{
-// 		Status:     res.Results[0].Status,
-// 		ExitStatus: res.Results[0].ExitStatus,
-// 		Error:      res.Results[0].Error,
-// 	}
-// 	assert.NoError(t, res.Error)
-
-// 	// read execute output
-// 	var executeOutput []byte
-// 	var err error
-// 	if res.Results[0].ExitStatus == 0 {
-// 		_, err = res.Results[0].Files["stdout"].Seek(0, 0)
-// 		assert.NoError(t, err, "failed to reseek execute stdout: ")
-
-// 		executeOutput, err = io.ReadAll(res.Results[0].Files["stdout"])
-// 		assert.NoError(t, err, "failed to read execute stdout: ")
-// 	} else {
-// 		_, err = res.Results[0].Files["stderr"].Seek(0, 0)
-// 		assert.NoError(t, err, "failed to reseek execute stderr: ")
-
-// 		executeOutput, err = io.ReadAll(res.Results[0].Files["stderr"])
-// 		assert.NoError(t, err, "failed to read execute stderr: ")
-// 	}
-// 	executeRes.Output = string(executeOutput)
-// 	assert.Equal(t, "114", executeRes.Output, executeRes)
-
-// 	id, ok := res.Results[0].FileIDs["tmp.txt"]
-// 	if !ok {
-// 		t.Errorf("failed to finish execute: failed to cache file, executeRes: %+v", executeRes)
-// 	}
-
-// 	s, f := judgeManger.fs.Get(id)
-// 	t.Errorf("s: %+v, f: %+v", s, f)
-// }
-
-var fileCaches map[string]string
+var fileCaches map[string]map[string]string
 
 func TestCompile(t *testing.T) {
 	// p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
 	ctx := context.Background()
-	fileCaches = make(map[string]string)
+	fileCaches = make(map[string]map[string]string)
 
 	for language, conf := range languageConfig {
 		// just for C
@@ -163,37 +94,58 @@ func TestCompile(t *testing.T) {
 		t.Run(language, func(t *testing.T) {
 			codes, err := os.ReadFile("tests/" + conf.SourceName)
 			assert.NoError(t, err)
-			sub := &model.Submission{Language: language, SourceCode: codes}
+
+			var sub *model.Submission
+			if language == "c" {
+				assert.Equal(t, "-o main", conf.Options["o"])
+				sub = &model.Submission{Language: language, SourceCode: codes, CompilerOption: "o"}
+			} else {
+				sub = &model.Submission{Language: language, SourceCode: codes}
+			}
 
 			compileRes, err := judgeManger.Compile(ctx, sub)
+			defer func() {
+				if compileRes.Stdout != nil {
+					_ = compileRes.Stdout.Close()
+				}
+				if compileRes.Stderr != nil {
+					_ = compileRes.Stderr.Close()
+
+				}
+			}()
 			assert.NotNil(t, compileRes)
 			assert.NoError(t, err)
 			if compileRes.ExitStatus != 0 {
 				t.Errorf("failed to finish compile: compileRes.Status != 0, compileRes: %+v", compileRes)
 			}
-			fileCaches[language] = compileRes.ArtifactFileId
+			fileCaches[language] = compileRes.ArtifactFileIDs
 		})
 	}
 }
 
-func TestExecuteFile(t *testing.T) {
+func TestExecute(t *testing.T) {
 	p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
 	ctx := context.Background()
 	stdin := "Hello,world.\n" // should not contain space
 	stdout := stdin
 
-	for language := range languageConfig {
+	for language, conf := range languageConfig {
 		// just for C
 		if language != "c" {
 			continue
 		}
 
 		t.Run(language, func(t *testing.T) {
-			executeRes, err := judgeManger.ExecuteFile(ctx,
-				fileCaches[language],
-				&worker.MemoryFile{Content: []byte(stdin)}, false,
+			executeRes, err := judgeManger.Execute(ctx,
+				conf.ExecuteCmd,
+				&worker.MemoryFile{Content: []byte(stdin)}, fileCaches[language],
 				time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit),
 			)
+			defer func() {
+				_ = executeRes.Stdout.Close()
+				_ = executeRes.Stderr.Close()
+			}()
+
 			assert.NoError(t, err)
 			if executeRes.ExitStatus != 0 {
 				t.Errorf("failed to execute: executeRes.ExitStatus != 0, executeRes: %+v", executeRes)
@@ -208,13 +160,31 @@ func TestExecuteFile(t *testing.T) {
 	}
 }
 
-func loadConf() *config.JudgeConfig {
-	var conf judgeconfig.Config
-	if err := conf.Load(); err != nil {
-		if err == flag.ErrHelp {
-			os.Exit(0)
+func TestJudge(t *testing.T) {
+	p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
+	ctx := context.Background()
+
+	var err error
+	testcase := &model.TestCase{}
+	f, err := judgeManger.fs.New()
+	assert.NoError(t, err)
+	_, err = io.WriteString(f, "Hello,world.\n")
+	assert.NoError(t, err)
+	testcase.InputKey, err = judgeManger.fs.Add("stddin", f.Name())
+	assert.NoError(t, err)
+	testcase.OutputKey = testcase.InputKey
+
+	for language := range languageConfig {
+		// just for C
+		if language != "c" {
+			continue
 		}
-		log.Fatalln("load config failed ", err)
+
+		t.Run(language, func(t *testing.T) {
+			judgeRes, err := judgeManger.Judge(ctx, language, fileCaches[language], testcase, time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit))
+			assert.NoError(t, err)
+			assert.Equal(t, model.Conclusion_Accepted, judgeRes.Conclusion)
+			assert.Equal(t, "Hello,world.\n", judgeRes.TruncatedOutput)
+		})
 	}
-	return (*config.JudgeConfig)(&conf)
 }
