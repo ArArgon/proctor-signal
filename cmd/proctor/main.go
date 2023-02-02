@@ -55,7 +55,7 @@ func main() {
 	gojudge.NewForceGCWorker(judgeConf)
 
 	resManager := resource.NewResourceManager(logger, backendCli, fs.(*resource.FileStore))
-	judgeManager := judge.NewJudgeManager(work, conf)
+	judgeManager := judge.NewJudgeManager(work, conf, fs.(*resource.FileStore), logger)
 	w := judgeworker.NewWorker(judgeManager, resManager, backendCli)
 	w.Start(ctx, logger, judgeConf.Parallelism)
 

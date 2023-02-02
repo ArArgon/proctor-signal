@@ -29,6 +29,14 @@ type entry struct {
 	problem *model.Problem
 }
 
+func resStoreKey(ent *entry, key string) string {
+	return ent.Key() + "/" + key
+}
+
+func ResKey(p *model.Problem, key string) string {
+	return "problem/" + resStoreKey(fromProblem(p), key)
+}
+
 func fromIDVer(id, ver string) *entry {
 	return &entry{id: id, version: ver}
 }
