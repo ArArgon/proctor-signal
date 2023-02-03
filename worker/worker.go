@@ -84,42 +84,21 @@ func (w *Worker) spin(ctx context.Context, logger *zap.Logger, id int) {
 
 func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.CompleteJudgeTaskRequest, error) {
 	// Fetch judge task.
-	task, err := w.backend.FetchJudgeTask(ctx, &backend.FetchJudgeTaskRequest{})
-	if err != nil {
-		sugar.With("err", err).Errorf("failed to fetch task from remote")
-		return nil, err
-	}
-
-	// No Content.
-	if task.StatusCode == 204 {
-		sugar.With("reason", task.GetReason()).Debug("no content received")
-		return nil, nil
-	}
-
-	if task.StatusCode < 200 || task.StatusCode >= 300 {
-		err = errors.Errorf("backend error: %s", task.GetReason())
-		sugar.With("err", err).Error("failed to fetch task from remote, server-side err")
-		return nil, err
-	}
-
-	if task.Task == nil {
-		err = errors.New("empty task")
-		sugar.With("err", err).Error("invalid task")
-		return nil, err
-	}
-
-	sub := task.Task
-	receiveTime := time.Now()
-	internErr := func(messages ...string) *backend.CompleteJudgeTaskRequest {
-		return &backend.CompleteJudgeTaskRequest{
-			Result: &model.JudgeResult{
-				Conclusion:  model.Conclusion_InternalError,
-				ReceiveTime: timestamppb.New(receiveTime),
-				ErrMessage:  lo.ToPtr(strings.Join(messages, " ")),
-			},
+	sub, abort, err := w.fetch(ctx, sugar)
+	if abort {
+		if err != nil {
+			return &backend.CompleteJudgeTaskRequest{Result: &model.JudgeResult{
+				Conclusion: model.Conclusion_InternalError,
+				ErrMessage: lo.ToPtr("failed to fetch: " + err.Error()),
+			}}, err
 		}
+		return nil, err
 	}
 
+	result := &model.JudgeResult{
+		SubmissionId: sub.Id,
+		ReceiveTime:  timestamppb.Now(),
+	}
 	sugar = sugar.With(
 		"submission_id", sub.Id,
 		"problem_id", sub.ProblemId,
@@ -132,76 +111,152 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 	p, unlock, err := w.resManager.HoldAndLock(ctx, sub.ProblemId, sub.ProblemVer)
 	if err != nil {
 		sugar.With("err", err).Error("failed to hold and lock problem")
-		return internErr("failed to hold and lock problem,", err.Error()),
+		internErr(result, "failed to hold and lock problem,", err.Error())
+		return &backend.CompleteJudgeTaskRequest{Result: result},
 			errors.WithMessagef(err, "failed to hold and lock problem")
 	}
 	defer unlock()
 
 	// Compile source code.
-	compileRes, err := w.judge.Compile(ctx, sub)
-	if err != nil {
-		// Internal error.
-		sugar.With("err", err).Error("an internal error occurred during compilation")
+	artifactIDs, abort, err := w.compile(ctx, sugar, sub, result)
+	if abort {
+		return &backend.CompleteJudgeTaskRequest{Result: result}, err
+	}
+	defer w.judge.RemoveFiles(artifactIDs)
 
+	// Judge on the DAG.
+	subtasks, err := w.judgeOnDAG(ctx, sugar, sub, p, artifactIDs)
+	if err != nil {
+		// internal err.
+		internErr(result, "an internal error occured during judgement: ", err.Error())
+		return &backend.CompleteJudgeTaskRequest{Result: result}, err
+	}
+
+	// Fill conclusion, totalSpace, totalTime.
+	result.SubtaskResults = subtasks
+	result.CompleteTime = timestamppb.Now()
+	result.TotalTime = lo.Sum(lo.Map(subtasks, func(s *model.SubtaskResult, _ int) uint32 { return s.TotalTime }))
+	result.TotalSpace = lo.Max(lo.Map(subtasks, func(s *model.SubtaskResult, _ int) float32 { return s.TotalSpace }))
+	result.Conclusion = model.Conclusion_Accepted
+	for _, s := range subtasks {
+		if s.IsRun && s.Conclusion != model.Conclusion_Accepted {
+			result.Conclusion = s.Conclusion
+		}
+	}
+
+	sugar.Infof("judgement succeed, conclusion: %s", result.Conclusion.String())
+	return &backend.CompleteJudgeTaskRequest{Result: result}, nil
+}
+
+func internErr(result *model.JudgeResult, messages ...string) {
+	result.Conclusion = model.Conclusion_InternalError
+	result.ErrMessage = lo.ToPtr(strings.Join(messages, ""))
+	result.CompleteTime = timestamppb.Now()
+}
+
+func (w *Worker) fetch(ctx context.Context, sugar *zap.SugaredLogger,
+) (sub *model.Submission, abort bool, err error) {
+	task, err := w.backend.FetchJudgeTask(ctx, &backend.FetchJudgeTaskRequest{})
+	if err != nil {
+		sugar.With("err", err).Errorf("failed to fetch task from remote")
+		return nil, true, err
+	}
+
+	// No Content.
+	if task.StatusCode == 204 {
+		sugar.With("reason", task.GetReason()).Debug("no content received")
+		return nil, true, nil
+	}
+
+	if task.StatusCode < 200 || task.StatusCode >= 300 {
+		err = errors.Errorf("backend error: %s", task.GetReason())
+		sugar.With("err", err).Error("failed to fetch task from remote, server-side err")
+		return nil, true, err
+	}
+
+	if sub = task.Task; sub == nil {
+		err = errors.New("empty task")
+		sugar.With("err", err).Error("invalid task")
+		return nil, true, err
+	}
+	return
+}
+
+func (w *Worker) compile(
+	ctx context.Context, sugar *zap.SugaredLogger,
+	sub *model.Submission, result *model.JudgeResult,
+) (artifactIDs map[string]string, abort bool, err error) {
+	compileRes, err := w.judge.Compile(ctx, sub)
+
+	defer func() {
 		if compileRes != nil {
-			w.judge.RemoveFiles(compileRes.ArtifactFileIDs)
 			_ = compileRes.Stdout.Close()
 			_ = compileRes.Stderr.Close()
 		}
+	}()
 
-		return internErr("failed to compile,", err.Error()), err
+	if err != nil {
+		// Internal error.
+		sugar.With("err", err).Error("an internal error occurred during compilation")
+		w.judge.RemoveFiles(compileRes.ArtifactFileIDs)
+
+		internErr(result, "failed to compile,", err.Error())
+		return nil, true, err
 	}
 
-	defer w.judge.RemoveFiles(compileRes.ArtifactFileIDs)
-	defer func() {
-		_ = compileRes.Stdout.Close()
-		_ = compileRes.Stderr.Close()
-	}()
+	result.ErrMessage = lo.ToPtr(compileRes.Error)
+	compilerStderr, _ := io.ReadAll(compileRes.Stderr)
+	result.CompilerOutput = lo.ToPtr(string(compilerStderr))
 
 	if compileRes.Status != envexec.StatusAccepted {
 		// Compile error (not an internal error).
-		compileErr := &backend.CompleteJudgeTaskRequest{
-			Result: &model.JudgeResult{
-				SubmissionId: sub.Id,
-				ProblemId:    p.Id,
-				ReceiveTime:  timestamppb.New(receiveTime),
-			},
-		}
 		sugar.With("err", compileRes.Status.String()).Info("failed to compile")
-		compileErr.Result.ErrMessage = lo.ToPtr(compileRes.Error)
-		compileErr.Result.Conclusion = model.ConvertStatusToConclusion(compileRes.Status)
-		return compileErr, nil
+		result.Conclusion = model.ConvertStatusToConclusion(compileRes.Status)
+		return nil, true, nil
 	}
+	return compileRes.ArtifactFileIDs, false, nil
+}
 
+func (w *Worker) judgeOnDAG(
+	ctx context.Context, sugar *zap.SugaredLogger,
+	sub *model.Submission, p *model.Problem,
+	artifactIDs map[string]string,
+) (subResults []*model.SubtaskResult, err error) {
 	// Compose the DAG.
 	dag := model.NewSubtaskGraph(p)
 
 	// Judge on the DAG.
 	score := make(map[uint32]*model.SubtaskResult, len(dag.IDs))
-	dag.Traverse(func(subtask *model.Subtask) bool {
-		subtaskResult := &model.SubtaskResult{
-			Id:          subtask.Id,
-			IsRun:       true,
-			ScorePolicy: subtask.ScorePolicy,
-			Conclusion:  model.Conclusion_Accepted,
-			CaseResults: make([]*model.CaseResult, 0, len(subtask.TestCases)),
+	for _, s := range p.Subtasks {
+		score[s.Id] = &model.SubtaskResult{
+			Id:          s.Id,
+			IsRun:       false,
+			ScorePolicy: s.ScorePolicy,
+			Conclusion:  model.Conclusion_Invalid,
 		}
-		score[subtask.Id] = subtaskResult
+	}
+
+	dag.Traverse(func(subtask *model.Subtask) bool {
+		subResult := score[subtask.Id]
+		subResult.IsRun = true
+		subResult.Conclusion = model.Conclusion_Accepted
+		subResult.CaseResults = make([]*model.CaseResult, 0, len(subtask.TestCases))
 
 		for _, testcase := range subtask.TestCases {
 			caseResult := &model.CaseResult{Id: testcase.Id}
-			subtaskResult.CaseResults = append(subtaskResult.CaseResults, caseResult)
+			subResult.CaseResults = append(subResult.CaseResults, caseResult)
 
 			timeLimit := time.Duration(p.DefaultTimeLimit) * time.Millisecond
 			spaceLimit := runner.Size(p.DefaultSpaceLimit * 1024 * 1024) // Megabytes.
 
-			judgeRes, err := w.judge.Judge(
-				ctx, p, sub.Language, compileRes.ArtifactFileIDs, testcase, timeLimit, spaceLimit,
+			var judgeRes *judge.JudgeRes
+			judgeRes, err = w.judge.Judge(
+				ctx, p, sub.Language, artifactIDs, testcase, timeLimit, spaceLimit,
 			)
 			if err != nil {
 				sugar.With("err", err).Error("failed to judge")
 				caseResult.Conclusion = model.Conclusion_InternalError
-				continue
+				return false
 			}
 
 			caseResult.Conclusion = judgeRes.Conclusion
@@ -209,18 +264,16 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 			caseResult.TotalTime = uint32(judgeRes.TotalTime.Milliseconds())
 			caseResult.TotalSpace = float32(judgeRes.TotalSpace.KiB())
 			caseResult.ReturnValue = int32(judgeRes.ExitStatus)
+			caseResult.TruncatedOutput = &judgeRes.TruncatedOutput
 
 			if judgeRes.OutputID != "" {
 				caseResult.OutputKey = judgeRes.OutputID
 				caseResult.OutputSize = uint64(judgeRes.OutputSize)
-				caseResult.TruncatedOutput = &judgeRes.TruncatedOutput
-			} else {
-				caseResult.TruncatedOutput = lo.ToPtr("<failed to read output>")
 			}
 
-			subtaskResult.TotalTime += caseResult.TotalTime
-			if subtaskResult.TotalSpace < caseResult.TotalSpace {
-				subtaskResult.TotalSpace = caseResult.TotalSpace
+			subResult.TotalTime += caseResult.TotalTime
+			if subResult.TotalSpace < caseResult.TotalSpace {
+				subResult.TotalSpace = caseResult.TotalSpace
 			}
 
 			// Score
@@ -229,68 +282,23 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 				caseResult.Score = subtask.Score / int32(len(subtask.TestCases))
 				switch subtask.ScorePolicy {
 				case model.ScorePolicy_SUM:
-					subtaskResult.Score += caseResult.Score
+					subResult.Score += caseResult.Score
 				case model.ScorePolicy_PCT:
-					subtaskResult.Score += caseResult.Score / int32(len(subtask.TestCases))
+					subResult.Score += caseResult.Score / int32(len(subtask.TestCases))
 				case model.ScorePolicy_MIN:
-					if subtaskResult.Score > caseResult.Score {
-						subtaskResult.Score = caseResult.Score
+					if subResult.Score > caseResult.Score {
+						subResult.Score = caseResult.Score
 					}
 				}
 				continue
 			}
-			subtaskResult.Conclusion = judgeRes.Conclusion
+			subResult.Conclusion = judgeRes.Conclusion
 		}
-
 		return true
 	})
 
-	// Final score.
-	result := &model.JudgeResult{
-		SubmissionId: sub.Id,
-		ProblemId:    sub.ProblemId,
-		ReceiveTime:  timestamppb.New(receiveTime),
-		CompleteTime: timestamppb.Now(),
-		Conclusion:   model.Conclusion_Accepted,
-	}
-	for _, id := range dag.IDs {
-		if s, ok := score[id]; ok {
-			if s.Conclusion != model.Conclusion_Accepted {
-				result.Conclusion = s.Conclusion
-			}
-			continue
-		}
-		// Not scored.
-		score[id] = &model.SubtaskResult{
-			Id:    id,
-			IsRun: false,
-		}
-	}
-	result.SubtaskResults = lo.Values(score)
-
-	// read compile output
-	bytes, err := io.ReadAll(compileRes.Stdout)
-	if err != nil {
-		sugar.With("err", compileRes.Status.String()).Error("failed to read compile output")
-		result.CompilerOutput = lo.ToPtr("failed to read compile output")
-	} else {
-		result.CompilerOutput = lo.ToPtr(string(bytes))
-	}
-
-	// Calculate the result.TotalTime & result.TotalSpace
-	for _, subtaskResult := range result.SubtaskResults {
-		if !subtaskResult.IsRun {
-			continue
-		}
-
-		result.TotalTime += subtaskResult.TotalTime
-		if result.TotalSpace < subtaskResult.TotalSpace {
-			result.TotalSpace = subtaskResult.TotalSpace
-		}
-	}
-
-	sugar.Infof("judgement succeed, conclusion: %s", result.Conclusion.String())
-	return &backend.CompleteJudgeTaskRequest{Result: result}, nil
+	subResults = lo.Values(score)
+	return
 }
 
 func (w *Worker) Wait() {
