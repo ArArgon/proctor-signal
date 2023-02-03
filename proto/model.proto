@@ -205,7 +205,7 @@ message CaseResult {
   Conclusion conclusion = 5;
   DiffPolicy diff_policy = 6;
 
-  // Total time this case spent in MiB.
+  // Total time this case spent in milliseconds.
   uint32 total_time = 7;
 
   // Total space this case used in MiB.
