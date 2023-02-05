@@ -186,7 +186,7 @@ func TestCompileOpts(t *testing.T) {
 	conf := languageConfig["cpp"]
 	ctx := context.Background()
 
-	codes, err := os.ReadFile("tests/" + conf.SourceName + "_cpp14")
+	codes, err := os.ReadFile("tests/source_cpp14.cpp")
 	assert.NoError(t, err)
 
 	sub := &model.Submission{Language: language, SourceCode: codes, CompilerOption: "cpp14"}
