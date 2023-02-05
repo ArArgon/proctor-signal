@@ -81,16 +81,10 @@ func loadConf() *config.JudgeConfig {
 var fileCaches map[string]map[string]string
 
 func TestCompile(t *testing.T) {
-	// p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
 	ctx := context.Background()
 	fileCaches = make(map[string]map[string]string)
 
 	for language, conf := range languageConfig {
-		// just for C & cpp
-		if language != "c" && language != "cpp" {
-			continue
-		}
-
 		t.Run(language, func(t *testing.T) {
 			codes, err := os.ReadFile("tests/" + conf.SourceName)
 			assert.NoError(t, err)
@@ -133,11 +127,6 @@ func TestExecute(t *testing.T) {
 	stdout := stdin
 
 	for language, conf := range languageConfig {
-		// just for C
-		if language != "c" && language != "cpp" {
-			continue
-		}
-
 		t.Run(language, func(t *testing.T) {
 			executeRes, err := judgeManger.Execute(ctx,
 				conf.ExecuteCmd,
@@ -178,11 +167,6 @@ func TestJudge(t *testing.T) {
 	testcase.OutputKey = testcase.InputKey
 
 	for language := range languageConfig {
-		// just for C
-		if language != "c" && language != "cpp" {
-			continue
-		}
-
 		t.Run(language, func(t *testing.T) {
 			judgeRes, err := judgeManger.Judge(
 				ctx, nil, language, fileCaches[language], testcase,
