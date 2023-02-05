@@ -86,8 +86,8 @@ func TestCompile(t *testing.T) {
 	fileCaches = make(map[string]map[string]string)
 
 	for language, conf := range languageConfig {
-		// just for C
-		if language != "c" {
+		// just for C & cpp
+		if language != "c" && language != "cpp" {
 			continue
 		}
 
@@ -131,7 +131,7 @@ func TestExecute(t *testing.T) {
 
 	for language, conf := range languageConfig {
 		// just for C
-		if language != "c" {
+		if language != "c" && language != "cpp" {
 			continue
 		}
 
@@ -176,7 +176,7 @@ func TestJudge(t *testing.T) {
 
 	for language := range languageConfig {
 		// just for C
-		if language != "c" {
+		if language != "c" && language != "cpp" {
 			continue
 		}
 
