@@ -81,7 +81,6 @@ func (m *Manager) RemoveFiles(fileIDs map[string]string) {
 
 func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileRes, error) {
 	// TODO: compile options
-	sub.Language = "c"
 	compileConf, ok := m.conf.LanguageConf[sub.Language]
 	if !ok {
 		return nil, fmt.Errorf("compile config for %s not found", sub.Language)
