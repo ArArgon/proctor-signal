@@ -213,7 +213,7 @@ func TestCompileOpts(t *testing.T) {
 
 	executeRes, err := judgeManger.Execute(ctx,
 		conf.ExecuteCmd,
-		&worker.MemoryFile{Content: []byte("")}, fileCaches[language],
+		&worker.MemoryFile{Content: []byte("")}, compileRes.ArtifactFileIDs,
 		time.Duration(uint32(time.Second)), runner.Size(104857600),
 	)
 	defer func() {
@@ -230,5 +230,5 @@ func TestCompileOpts(t *testing.T) {
 		t.Errorf("failed to read execute output, executeRes: %+v", executeRes)
 	}
 
-	assert.Equal(t, "8888889885", string(bytes), fmt.Sprintf("executeRes: %+v", executeRes))
+	assert.Equal(t, "8888889885\n", string(bytes), fmt.Sprintf("executeRes: %+v", executeRes))
 }
