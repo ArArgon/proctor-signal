@@ -16,7 +16,6 @@ CompileSpaceLimit = 104857600
 ExecuteCmd = "main"
 Options = {  o = "-o main"} # for options test
 
-
 [languageConf.java]
 SourceName = 'Source.java'
 ArtifactName = 'Source.class'
