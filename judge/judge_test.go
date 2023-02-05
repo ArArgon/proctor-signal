@@ -104,6 +104,7 @@ func TestCompile(t *testing.T) {
 			}
 
 			compileRes, err := judgeManger.Compile(ctx, sub)
+			assert.NotNil(t, compileRes)
 			defer func() {
 				if compileRes.Stdout != nil {
 					_ = compileRes.Stdout.Close()
@@ -113,10 +114,12 @@ func TestCompile(t *testing.T) {
 
 				}
 			}()
-			assert.NotNil(t, compileRes)
 			assert.NoError(t, err)
 			if compileRes.Status != envexec.StatusAccepted {
-				t.Errorf("failed to finish compile: compileRes.Status != 0, compileRes: %+v", compileRes)
+				stdout, _ := io.ReadAll(compileRes.Stdout)
+				stderr, _ := io.ReadAll(compileRes.Stderr)
+				t.Errorf("failed to finish compile: compileRes.Status != 0, compile output: %s, compileRes: %+v",
+					"==stdout==\n"+string(stdout)+"==stderr==\n"+string(stderr), compileRes)
 			}
 			fileCaches[language] = compileRes.ArtifactFileIDs
 		})
