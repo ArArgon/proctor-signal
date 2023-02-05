@@ -72,16 +72,6 @@ type JudgeRes struct {
 	TotalSpace      runner.Size
 }
 
-//var languageConfig map[string]struct {
-//	SourceName        string            `yaml:"SourceName"`
-//	ArtifactName      string            `yaml:"ArtifactName"`
-//	CompileCmd        string            `yaml:"CompileCmd"`
-//	CompileTimeLimit  uint32            `yaml:"CompileTimeLimit"`
-//	CompileSpaceLimit uint64            `yaml:"CompileSpaceLimit"`
-//	ExecuteCmd        string            `yaml:"ExecuteCmd"`
-//	Options           map[string]string `yaml:"Options"`
-//}
-
 func (m *Manager) RemoveFiles(fileIDs map[string]string) {
 	_, err := m.fs.BulkRemove(lo.Values(fileIDs))
 	if err != nil {
@@ -91,7 +81,6 @@ func (m *Manager) RemoveFiles(fileIDs map[string]string) {
 
 func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileRes, error) {
 	// TODO: compile options
-	sub.Language = "c"
 	compileConf, ok := m.conf.LanguageConf[sub.Language]
 	if !ok {
 		return nil, fmt.Errorf("compile config for %s not found", sub.Language)
@@ -169,7 +158,7 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 	return compileRes, nil
 }
 
-// ExecuteFile execute cmd with stdin and copyIn files.
+// Execute executes cmd with stdin and copyIn files.
 func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile, copyInFileIDs map[string]string, CPULimit time.Duration, memoryLimit runner.Size) (*ExecuteRes, error) {
 	workerCmd := worker.Cmd{
 		Env:         []string{"PATH=/usr/bin:/bin"},
@@ -333,7 +322,7 @@ func (m *Manager) Judge(
 	return judgeRes, nil
 }
 
-// Compare compares actual's content to expect's content, return the result whether they are equal.
+// Compare compares actual content to expected content, return the result whether they are equal.
 // It should just be called by func Judge.
 func compare(expected, actual io.Reader, buffLen int) (bool, error) {
 	expectedOutputBuff := make([]byte, buffLen)

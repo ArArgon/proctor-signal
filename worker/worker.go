@@ -242,8 +242,8 @@ func (w *Worker) judgeOnDAG(
 		subResult.Conclusion = model.Conclusion_Accepted
 		subResult.CaseResults = make([]*model.CaseResult, 0, len(subtask.TestCases))
 
-		for _, testcase := range subtask.TestCases {
-			caseResult := &model.CaseResult{Id: testcase.Id}
+		for i, testcase := range subtask.TestCases {
+			caseResult := &model.CaseResult{Id: uint32(i)}
 			subResult.CaseResults = append(subResult.CaseResults, caseResult)
 
 			timeLimit := time.Duration(p.DefaultTimeLimit) * time.Millisecond
@@ -262,7 +262,7 @@ func (w *Worker) judgeOnDAG(
 			caseResult.Conclusion = judgeRes.Conclusion
 			caseResult.DiffPolicy = p.DiffPolicy
 			caseResult.TotalTime = uint32(judgeRes.TotalTime.Milliseconds())
-			caseResult.TotalSpace = float32(judgeRes.TotalSpace.KiB())
+			caseResult.TotalSpace = float32(judgeRes.TotalSpace.KiB()) / 1024
 			caseResult.ReturnValue = int32(judgeRes.ExitStatus)
 			caseResult.TruncatedOutput = &judgeRes.TruncatedOutput
 
