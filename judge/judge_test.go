@@ -118,7 +118,7 @@ func TestCompile(t *testing.T) {
 			if compileRes.Status != envexec.StatusAccepted {
 				stdout, _ := io.ReadAll(compileRes.Stdout)
 				stderr, _ := io.ReadAll(compileRes.Stderr)
-				t.Errorf("failed to finish compile: compileRes.Status != 0, compile output: %s, compileRes: %+v",
+				t.Errorf("failed to finish compile: compileRes.Status != 0, compile output: \n%s, compileRes: \n%+v",
 					"==stdout==\n"+string(stdout)+"==stderr==\n"+string(stderr), compileRes)
 			}
 			fileCaches[language] = compileRes.ArtifactFileIDs
