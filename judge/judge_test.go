@@ -89,14 +89,7 @@ func TestCompile(t *testing.T) {
 			codes, err := os.ReadFile("tests/" + conf.SourceName)
 			assert.NoError(t, err)
 
-			var sub *model.Submission
-			if language == "c" {
-				assert.Equal(t, "-o main", conf.Options["o"])
-				sub = &model.Submission{Language: language, SourceCode: codes, CompilerOption: "o"}
-			} else {
-				sub = &model.Submission{Language: language, SourceCode: codes}
-			}
-
+			sub := &model.Submission{Language: language, SourceCode: codes}
 			compileRes, err := judgeManger.Compile(ctx, sub)
 			assert.NotNil(t, compileRes)
 			defer func() {
