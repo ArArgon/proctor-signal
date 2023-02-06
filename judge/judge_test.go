@@ -180,7 +180,69 @@ func TestJudge(t *testing.T) {
 	}
 }
 
-func TestCompileOpts(t *testing.T) {
+func TestCompileOption(t *testing.T) {
+	ctx := context.Background()
+	stdin := "Hello,world.\n" // should not contain space
+	stdout := stdin
+
+	for language, conf := range languageConfig {
+		for optName := range conf.Options {
+			t.Run(language, func(t *testing.T) {
+				codes, err := os.ReadFile("tests/" + optName + "_" + conf.ArtifactName)
+				if os.IsNotExist(err) {
+					// use normal codes
+					codes, err = os.ReadFile("tests/" + conf.SourceName)
+					assert.NoError(t, err)
+				}
+				sub := &model.Submission{Language: language, SourceCode: codes, CompilerOption: `"[` + optName + `]"`}
+
+				compileRes, err := judgeManger.Compile(ctx, sub)
+				assert.NotNil(t, compileRes)
+				defer func() {
+					if compileRes.Stdout != nil {
+						_ = compileRes.Stdout.Close()
+					}
+					if compileRes.Stderr != nil {
+						_ = compileRes.Stderr.Close()
+
+					}
+				}()
+				assert.NoError(t, err)
+
+				if compileRes.Status != envexec.StatusAccepted {
+					stdout, _ := io.ReadAll(compileRes.Stdout)
+					stderr, _ := io.ReadAll(compileRes.Stderr)
+					t.Errorf("failed to finish compile: compileRes.Status != 0, compile output: \n%s, compileRes: \n%+v",
+						"==stdout==\n"+string(stdout)+"==stderr==\n"+string(stderr), compileRes)
+				}
+
+				executeRes, err := judgeManger.Execute(ctx,
+					conf.ExecuteCmd,
+					&worker.MemoryFile{Content: []byte(stdin)}, compileRes.ArtifactFileIDs,
+					time.Second, runner.Size(104857600),
+				)
+				defer func() {
+					_ = executeRes.Stdout.Close()
+					_ = executeRes.Stderr.Close()
+				}()
+
+				assert.NoError(t, err)
+				if executeRes.ExitStatus != 0 {
+					t.Errorf("failed to execute: executeRes.ExitStatus != 0, executeRes: %+v", executeRes)
+				}
+				bytes, err := io.ReadAll(executeRes.Stdout)
+				if err != nil {
+					t.Errorf("failed to read execute output, executeRes: %+v", executeRes)
+				}
+
+				assert.Equal(t, stdout, string(bytes), fmt.Sprintf("executeRes: %+v", executeRes))
+			})
+
+		}
+	}
+}
+
+func TestCompileMultiOptions(t *testing.T) {
 	// just for cpp
 	language := "cpp"
 	conf := languageConfig["cpp"]
@@ -214,7 +276,7 @@ func TestCompileOpts(t *testing.T) {
 	executeRes, err := judgeManger.Execute(ctx,
 		conf.ExecuteCmd,
 		&worker.MemoryFile{Content: []byte("")}, compileRes.ArtifactFileIDs,
-		time.Duration(uint32(time.Second)), runner.Size(104857600),
+		time.Second, runner.Size(104857600),
 	)
 	defer func() {
 		_ = executeRes.Stdout.Close()

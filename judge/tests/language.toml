@@ -9,9 +9,9 @@ Options = {o2 = "-O2", cpp14 = "--std=c++14" }
 
 [languageConf.c]
 SourceName = 'source.c'
-ArtifactName = 'main'
+ArtifactName = 'a.out'
 CompileCmd = "/usr/bin/gcc source.c"
 CompileTimeLimit = 10000 # ms
 CompileSpaceLimit = 104857600
-ExecuteCmd = "main"
-Options = {  o = "-o main"} # for options test
+ExecuteCmd = "a.out"
+Options = {o = "-o a.out"} # for options test
