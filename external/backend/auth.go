@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"net/http"
+	"runtime"
 	"sync"
 	"time"
 
@@ -170,6 +171,8 @@ func (a *authManager) login(ctx context.Context) error {
 		Secret:    a.conf.Backend.AuthSecret,
 		Version:   a.version,
 		IpAddress: utils.GetLocalIP(),
+		Os:        runtime.GOOS,
+		Arch:      runtime.GOARCH,
 	})
 	if err != nil {
 		return err
