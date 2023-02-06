@@ -112,7 +112,7 @@ func TestFileStore(t *testing.T) {
 	t.Run("problem", func(t *testing.T) {
 		testSize := 5
 		entries := make([]*entry, 0, testSize)
-		files := make(map[string][]*sourceReader)
+		files := make(map[string][]string)
 		hash := make(map[string]string)
 
 		// Prepare problems and data.
@@ -123,36 +123,35 @@ func TestFileStore(t *testing.T) {
 			}
 			entries = append(entries, ent)
 			filesCnt := lo.Clamp(rand.Intn(20), 1, 20)
-			readers := lo.RepeatBy(filesCnt, func(index int) *sourceReader {
+			keys := make([]string, 0, filesCnt)
+			for j := 0; j < filesCnt; j++ {
 				dat := randomData(t)
 				key := utils.GenerateID()
 				hash[ent.Key()+"/"+key] = fmt.Sprintf("%x", sha1.Sum(dat))
-				return &sourceReader{
+				assert.NoError(t, fs.saveResource(ent, &sourceReader{
 					key:    key,
 					size:   tmpSize,
 					reader: io.NopCloser(bytes.NewReader(dat)),
-				}
-			})
-			files[ent.Key()] = readers
-			assert.NoError(t, fs.saveProblem(ent, readers))
+				}))
+				keys = append(keys, key)
+			}
+			files[ent.Key()] = keys
+			fs.submitResourceKeys(ent, keys)
 		}
-
-		// Ignore duplicated data.
-		assert.ErrorContains(t, fs.saveProblem(entries[0], files[entries[0].Key()]), "problem already exists")
 
 		// Read data.
 		for _, ent := range entries {
 			res := files[ent.Key()]
 			assert.DirExists(t, filepath.Join(loc, "persistent", ent.Key()))
-			for _, f := range res {
+			for _, key := range res {
 				// ID: problem/:problem_key/:test_file_key
-				p := fmt.Sprintf("problem/%s/%s", ent.Key(), f.key)
+				p := fmt.Sprintf("problem/%s/%s", ent.Key(), key)
 				fileKey, f2 := fs.Get(p)
-				assert.Equal(t, fileKey, f.key)
+				assert.Equal(t, fileKey, key)
 				assert.True(t, f2 != nil)
 				file := lo.Must(os.Open(f2.(*envexec.FileInput).Path))
 				assert.Equal(t,
-					hash[ent.Key()+"/"+f.key],
+					hash[ent.Key()+"/"+key],
 					fmt.Sprintf("%x", sha1.Sum(lo.Must(io.ReadAll(file)))),
 				)
 				assert.NoError(t, file.Close())
@@ -160,9 +159,9 @@ func TestFileStore(t *testing.T) {
 				// GetOsFile
 				file, fileKey, err = fs.GetOsFile(p)
 				assert.NoError(t, err)
-				assert.Equal(t, fileKey, f.key)
+				assert.Equal(t, fileKey, key)
 				assert.Equal(t,
-					hash[ent.Key()+"/"+f.key],
+					hash[ent.Key()+"/"+key],
 					fmt.Sprintf("%x", sha1.Sum(lo.Must(io.ReadAll(file)))),
 				)
 			}
@@ -173,9 +172,9 @@ func TestFileStore(t *testing.T) {
 			assert.NoError(t, fs.evictProblem(ent))
 			assert.NoDirExists(t, filepath.Join(loc, "persistent", ent.Key()))
 			res := files[ent.Key()]
-			for _, f := range res {
+			for _, key := range res {
 				// ID: problem/:problem_key/:test_file_key
-				p := fmt.Sprintf("problem/%s/%s", ent.Key(), f.key)
+				p := fmt.Sprintf("problem/%s/%s", ent.Key(), key)
 				f1, f2 := fs.Get(p)
 				assert.Equal(t, f1, "")
 				assert.True(t, f2 == nil)

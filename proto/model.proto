@@ -155,6 +155,8 @@ enum Conclusion {
   JudgementFailed = 11;    // Not used
   InvalidInteraction = 12; // Not used
   InternalError = 13;
+
+  CompilationError = 14;
 }
 
 message JudgeResult {

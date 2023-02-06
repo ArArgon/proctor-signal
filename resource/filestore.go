@@ -61,81 +61,69 @@ func NewFileStore(logger *zap.Logger, loc string) (*FileStore, error) {
 	}, nil
 }
 
-func (m *FileStore) saveProblem(ent *entry, readers []*sourceReader) error {
+func (m *FileStore) saveResource(ent *entry, r *sourceReader) error {
 	var (
-		sugar = m.logger.Sugar().With("problem_id", ent.id, "problem_ver", ent.version)
-		loc   = path.Join(m.probLoc, ent.Key())
-		err   error
-		buf   = make([]byte, 512)
-		saved []string
+		sugar   = m.logger.Sugar().With("problem_id", ent.id, "problem_ver", ent.version)
+		loc     = path.Join(m.probLoc, ent.Key())
+		resPath = path.Join(loc, sha(r.key))
 	)
 
-	sugar.Infof("dumping problem with %d files at %s", len(readers), loc)
+	if _, err := os.Lstat(loc); err != nil {
+		if !os.IsNotExist(err) {
+			sugar.With("err", err).Error("unable to read problem data folder")
+			return errors.WithMessagef(err, "unable to read problem data folder, loc: %s", loc)
+		}
 
-	m.mut.Lock()
-	defer m.mut.Unlock()
-
-	if _, err = os.Lstat(loc); err == nil {
-		sugar.Error("problem already exists")
-		return errors.Errorf("problem already exists, id:%s, ver:%s", ent.id, ent.version)
+		if err = os.Mkdir(loc, 0750); err != nil && !os.IsExist(err) {
+			sugar.With("err", err).Errorf("failed to mkdir for the problem")
+			return errors.WithMessagef(err, "failed to mkdir for the problem id:%s, ver:%s", ent.id, ent.version)
+		}
 	}
 
-	if err = os.Mkdir(loc, 0750); err != nil {
-		sugar.With("err", err).Errorf("failed to mkdir for the problem")
-		return errors.WithMessagef(err, "failed to mkdir for the problem id:%s, ver:%s", ent.id, ent.version)
+	f, err := os.OpenFile(resPath, os.O_CREATE|os.O_RDWR|os.O_EXCL, 0644)
+	if errors.Is(err, os.ErrExist) {
+		// File already exists, ignore.
+		sugar.Infof("ignore file %s: already exists", resPath)
+		return nil
+	}
+
+	if err != nil {
+		sugar.With("err", err).Errorf("failed to open a new file for %s", r.key)
+		return errors.WithMessagef(err, "failed to open a new file for %s", r.key)
 	}
 
 	defer func() {
 		if err != nil {
-			// Rollback.
-			sugar.Warnf("rolling back, removing %s", loc)
-			err = multierr.Append(err, os.RemoveAll(loc))
-			for _, k := range saved {
-				delete(m.probFiles, k)
-				delete(m.shaToKey, sha(k))
-			}
+			sugar.Warnf("failed to save file, rolling back")
+			err = multierr.Append(err, os.Remove(resPath))
 		}
 	}()
 
-	for _, r := range readers {
-		var f *os.File
-		resPath := path.Join(loc, sha(r.key))
-		fileKey := resStoreKey(ent, r.key)
-		var written int64
+	buf := make([]byte, 512)
+	written, err := io.CopyBuffer(f, r.reader, buf)
+	err = multierr.Append(err, f.Close())
 
-		f, err = os.OpenFile(resPath, os.O_CREATE|os.O_RDWR|os.O_EXCL, 0644)
-
-		if errors.Is(err, os.ErrExist) {
-			// File already exists, ignore.
-			sugar.Infof("ignore file %s: already exists", resPath)
-			continue
-		}
-
-		if err != nil {
-			sugar.With("err", err).Errorf("failed to open a new file for %s", r.key)
-			return errors.WithMessagef(err, "failed to open a new file for %s", r.key)
-		}
-
-		written, err = io.CopyBuffer(f, r.reader, buf)
-		_ = f.Close()
-
-		if err != nil {
-			sugar.With("err", err).Errorf("failed to save file %s", resPath)
-			return errors.WithMessagef(err, "failed to save file %s", resPath)
-		}
-
-		if r.size >= 0 && written != r.size {
-			sugar.Errorf("unexpected file size, written: %d, expecting: %d", written, r.size)
-			return errors.Errorf("unexpected file size, written: %d, expecting: %d", written, r.size)
-		}
-
-		m.probFiles[fileKey] = r.key
-		m.shaToKey[sha(r.key)] = r.key
-		saved = append(saved, fileKey)
-		sugar.Infof("successfully saved file %s", resPath)
+	if err != nil {
+		sugar.With("err", err).Errorf("failed to save file %s", resPath)
+		return errors.WithMessagef(err, "failed to save file %s", resPath)
 	}
 
+	if r.size >= 0 && written != r.size {
+		sugar.Errorf("unexpected file size, written: %d, expecting: %d", written, r.size)
+		return errors.Errorf("unexpected file size, written: %d, expecting: %d", written, r.size)
+	}
+
+	sugar.Debug("successfully saved resource %s", r.key)
 	return nil
+}
+
+func (m *FileStore) submitResourceKeys(ent *entry, keys []string) {
+	m.mut.Lock()
+	defer m.mut.Unlock()
+	for _, key := range keys {
+		m.probFiles[resStoreKey(ent, key)] = key
+		m.shaToKey[sha(key)] = key
+	}
 }
 
 func (m *FileStore) evictProblem(p *entry) error {

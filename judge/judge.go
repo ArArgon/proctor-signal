@@ -22,6 +22,9 @@ import (
 	"github.com/criyle/go-sandbox/runner"
 )
 
+const maxStdoutSize = 50 * 1024 * 1024        // 50 MiB
+const maxCompilerStderrSize = 1 * 1024 * 1024 // 1 MiB
+
 func NewJudgeManager(
 	worker worker.Worker, conf *config.Config, fs *resource.FileStore, logger *zap.Logger,
 ) *Manager {
@@ -99,8 +102,8 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 			ProcLimit:   50,
 			Files: []worker.CmdFile{
 				&worker.MemoryFile{Content: []byte("")},
-				&worker.Collector{Name: "stdout", Max: 10240},
-				&worker.Collector{Name: "stderr", Max: 10240},
+				&worker.Collector{Name: "stdout", Max: maxCompilerStderrSize},
+				&worker.Collector{Name: "stderr", Max: maxCompilerStderrSize},
 			},
 			CopyIn: map[string]worker.CmdFile{
 				compileConf.SourceName: &worker.MemoryFile{Content: sub.SourceCode},
@@ -163,12 +166,13 @@ func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
 		Env:         []string{"PATH=/usr/bin:/bin"},
 		Args:        strings.Split(cmd, " "),
 		CPULimit:    CPULimit,
+		ClockLimit:  CPULimit * 2,
 		MemoryLimit: memoryLimit,
 		ProcLimit:   50,
 		Files: []worker.CmdFile{
 			stdin,
-			&worker.Collector{Name: "stdout", Max: 10240},
-			&worker.Collector{Name: "stderr", Max: 10240},
+			&worker.Collector{Name: "stdout", Max: maxStdoutSize},
+			&worker.Collector{Name: "stderr", Max: maxStdoutSize},
 		},
 		CopyOut: []worker.CmdCopyOutFile{
 			{Name: "stdout", Optional: true},
@@ -261,6 +265,7 @@ func (m *Manager) Judge(
 		Error:      executeRes.Error,
 		TotalTime:  executeRes.TotalTime,
 		TotalSpace: executeRes.TotalSpace,
+		Conclusion: model.ConvertStatusToConclusion(executeRes.Status),
 	}
 	if err != nil {
 		return judgeRes, err
@@ -283,11 +288,7 @@ func (m *Manager) Judge(
 		return judgeRes, err
 	}
 
-	if ok {
-		judgeRes.Conclusion = model.Conclusion_Accepted
-	} else {
-		judgeRes.Conclusion = model.Conclusion_WrongAnswer
-	}
+	judgeRes.Conclusion = lo.Ternary(ok, model.Conclusion_Accepted, model.Conclusion_WrongAnswer)
 
 	// reset executeRes.Stdout
 	if _, err = executeRes.Stdout.Seek(0, 0); err != nil {
@@ -295,14 +296,9 @@ func (m *Manager) Judge(
 	}
 
 	// read judge output
-	var buff []byte
-	if executeRes.StdoutSize > int64(m.conf.JudgeOptions.MaxTruncatedOutput) {
-		buff = make([]byte, m.conf.JudgeOptions.MaxTruncatedOutput)
-		judgeRes.OutputSize = int64(m.conf.JudgeOptions.MaxTruncatedOutput)
-	} else {
-		buff = make([]byte, executeRes.StdoutSize)
-		judgeRes.OutputSize = executeRes.StdoutSize
-	}
+	buffLen := lo.Clamp(executeRes.StdoutSize, 0, int64(m.conf.JudgeOptions.MaxTruncatedOutput))
+	buff := make([]byte, buffLen)
+	judgeRes.OutputSize = executeRes.StdoutSize
 
 	if _, err = io.ReadFull(executeRes.Stdout, buff); err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 		return judgeRes, err

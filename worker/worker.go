@@ -106,6 +106,9 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 		"language", sub.Language,
 	)
 	sugar.Info("submission received!")
+	defer func() {
+		sugar.Infof("judgement completed, conclusion: %s", result.Conclusion.String())
+	}()
 
 	// Lock the problem (and defer unlock).
 	p, unlock, err := w.resManager.HoldAndLock(ctx, sub.ProblemId, sub.ProblemVer)
@@ -139,12 +142,12 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 	result.TotalSpace = lo.Max(lo.Map(subtasks, func(s *model.SubtaskResult, _ int) float32 { return s.TotalSpace }))
 	result.Conclusion = model.Conclusion_Accepted
 	for _, s := range subtasks {
+		result.Score += s.Score
 		if s.IsRun && s.Conclusion != model.Conclusion_Accepted {
 			result.Conclusion = s.Conclusion
 		}
 	}
 
-	sugar.Infof("judgement succeed, conclusion: %s", result.Conclusion.String())
 	return &backend.CompleteJudgeTaskRequest{Result: result}, nil
 }
 
@@ -210,8 +213,8 @@ func (w *Worker) compile(
 
 	if compileRes.Status != envexec.StatusAccepted {
 		// Compile error (not an internal error).
-		sugar.With("err", compileRes.Status.String()).Info("failed to compile")
-		result.Conclusion = model.ConvertStatusToConclusion(compileRes.Status)
+		sugar.With("err", compileRes.Status.String()).Debug("failed to compile")
+		result.Conclusion = model.Conclusion_CompilationError
 		return nil, true, nil
 	}
 	return compileRes.ArtifactFileIDs, false, nil
