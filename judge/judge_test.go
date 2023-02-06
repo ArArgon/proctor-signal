@@ -187,10 +187,10 @@ func TestCompileOption(t *testing.T) {
 					codes, err = os.ReadFile("tests/" + conf.SourceName)
 					assert.NoError(t, err)
 				}
-				sub := &model.Submission{Language: language, SourceCode: codes, CompilerOption: `"[` + optName + `]"`}
+				sub := &model.Submission{Language: language, SourceCode: codes, CompilerOption: `["` + optName + `"]`}
 
 				compileRes, err := judgeManger.Compile(ctx, sub)
-				assert.NotNil(t, compileRes)
+				assert.NotNil(t, compileRes, "")
 				defer func() {
 					if compileRes.Stdout != nil {
 						_ = compileRes.Stdout.Close()
