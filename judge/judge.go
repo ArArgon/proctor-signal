@@ -86,11 +86,7 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 		return nil, fmt.Errorf("compile config for %s not found", sub.Language)
 	}
 
-	args := lo.Filter(
-		strings.Split(compileConf.CompileCmd, " "),
-		func(str string, _ int) bool { return str != "" },
-	)
-
+	cmd := compileConf.CompileCmd
 	if sub.CompilerOption != "" {
 		var compileOptKeys []string
 		if err := json.Unmarshal([]byte(sub.CompilerOption), &compileOptKeys); err != nil {
@@ -102,9 +98,14 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 			if !ok {
 				return nil, fmt.Errorf("compile option %s for %s not found", optKey, sub.Language)
 			}
-			args = append(args, opt)
+			cmd += " " + opt
 		}
 	}
+
+	args := lo.Filter(
+		strings.Split(cmd, " "),
+		func(str string, _ int) bool { return str != "" },
+	)
 
 	res := <-m.worker.Execute(ctx, &worker.Request{
 		Cmd: []worker.Cmd{{
