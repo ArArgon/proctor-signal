@@ -81,16 +81,10 @@ func loadConf() *config.JudgeConfig {
 var fileCaches map[string]map[string]string
 
 func TestCompile(t *testing.T) {
-	// p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
 	ctx := context.Background()
 	fileCaches = make(map[string]map[string]string)
 
 	for language, conf := range languageConfig {
-		// just for C
-		if language != "c" {
-			continue
-		}
-
 		t.Run(language, func(t *testing.T) {
 			codes, err := os.ReadFile("tests/" + conf.SourceName)
 			assert.NoError(t, err)
@@ -104,6 +98,7 @@ func TestCompile(t *testing.T) {
 			}
 
 			compileRes, err := judgeManger.Compile(ctx, sub)
+			assert.NotNil(t, compileRes)
 			defer func() {
 				if compileRes.Stdout != nil {
 					_ = compileRes.Stdout.Close()
@@ -113,10 +108,13 @@ func TestCompile(t *testing.T) {
 
 				}
 			}()
-			assert.NotNil(t, compileRes)
 			assert.NoError(t, err)
+
 			if compileRes.Status != envexec.StatusAccepted {
-				t.Errorf("failed to finish compile: compileRes.Status != 0, compileRes: %+v", compileRes)
+				stdout, _ := io.ReadAll(compileRes.Stdout)
+				stderr, _ := io.ReadAll(compileRes.Stderr)
+				t.Errorf("failed to finish compile: compileRes.Status != 0, compile output: \n%s, compileRes: \n%+v",
+					"==stdout==\n"+string(stdout)+"==stderr==\n"+string(stderr), compileRes)
 			}
 			fileCaches[language] = compileRes.ArtifactFileIDs
 		})
@@ -130,11 +128,6 @@ func TestExecute(t *testing.T) {
 	stdout := stdin
 
 	for language, conf := range languageConfig {
-		// just for C
-		if language != "c" {
-			continue
-		}
-
 		t.Run(language, func(t *testing.T) {
 			executeRes, err := judgeManger.Execute(ctx,
 				conf.ExecuteCmd,
@@ -175,11 +168,6 @@ func TestJudge(t *testing.T) {
 	testcase.OutputKey = testcase.InputKey
 
 	for language := range languageConfig {
-		// just for C
-		if language != "c" {
-			continue
-		}
-
 		t.Run(language, func(t *testing.T) {
 			judgeRes, err := judgeManger.Judge(
 				ctx, nil, language, fileCaches[language], testcase,
@@ -190,4 +178,57 @@ func TestJudge(t *testing.T) {
 			assert.Equal(t, "Hello,world.\n", judgeRes.TruncatedOutput)
 		})
 	}
+}
+
+func TestCompileOpts(t *testing.T) {
+	// just for cpp
+	language := "cpp"
+	conf := languageConfig["cpp"]
+	ctx := context.Background()
+
+	codes, err := os.ReadFile("tests/source_cpp14.cpp")
+	assert.NoError(t, err)
+
+	sub := &model.Submission{Language: language, SourceCode: codes, CompilerOption: "cpp14"}
+
+	compileRes, err := judgeManger.Compile(ctx, sub)
+	assert.NotNil(t, compileRes)
+	defer func() {
+		if compileRes.Stdout != nil {
+			_ = compileRes.Stdout.Close()
+		}
+		if compileRes.Stderr != nil {
+			_ = compileRes.Stderr.Close()
+
+		}
+	}()
+	assert.NoError(t, err)
+
+	if compileRes.Status != envexec.StatusAccepted {
+		stdout, _ := io.ReadAll(compileRes.Stdout)
+		stderr, _ := io.ReadAll(compileRes.Stderr)
+		t.Errorf("failed to finish compile: compileRes.Status != 0, compile output: \n%s, compileRes: \n%+v",
+			"==stdout==\n"+string(stdout)+"==stderr==\n"+string(stderr), compileRes)
+	}
+
+	executeRes, err := judgeManger.Execute(ctx,
+		conf.ExecuteCmd,
+		&worker.MemoryFile{Content: []byte("")}, compileRes.ArtifactFileIDs,
+		time.Duration(uint32(time.Second)), runner.Size(104857600),
+	)
+	defer func() {
+		_ = executeRes.Stdout.Close()
+		_ = executeRes.Stderr.Close()
+	}()
+
+	assert.NoError(t, err)
+	if executeRes.ExitStatus != 0 {
+		t.Errorf("failed to execute: executeRes.ExitStatus != 0, executeRes: %+v", executeRes)
+	}
+	bytes, err := io.ReadAll(executeRes.Stdout)
+	if err != nil {
+		t.Errorf("failed to read execute output, executeRes: %+v", executeRes)
+	}
+
+	assert.Equal(t, "8888889885\n", string(bytes), fmt.Sprintf("executeRes: %+v", executeRes))
 }

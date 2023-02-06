@@ -5,7 +5,7 @@ CompileCmd = "/usr/bin/g++ source.cpp -o a.out"
 CompileTimeLimit = 10000 # ms
 CompileSpaceLimit = 104857600
 ExecuteCmd = "a.out"
-Options = {  o2 = "-O2", cpp14 = "--std=c++14" }
+Options = {o2 = "-O2", cpp14 = "--std=c++14" }
 
 [languageConf.c]
 SourceName = 'source.c'
@@ -15,12 +15,3 @@ CompileTimeLimit = 10000 # ms
 CompileSpaceLimit = 104857600
 ExecuteCmd = "main"
 Options = {  o = "-o main"} # for options test
-
-
-[languageConf.java]
-SourceName = 'Source.java'
-ArtifactName = 'Source.class'
-CompileCmd = "/usr/bin/java Source.java"
-CompileTimeLimit = 20000 # ms
-CompileSpaceLimit = 104857600
-ExecuteCmd = "/usr/bin/java -jar Source.class"
