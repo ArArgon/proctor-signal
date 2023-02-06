@@ -189,7 +189,7 @@ func TestCompileOpts(t *testing.T) {
 	codes, err := os.ReadFile("tests/source_cpp14.cpp")
 	assert.NoError(t, err)
 
-	sub := &model.Submission{Language: language, SourceCode: codes, CompilerOption: "cpp14"}
+	sub := &model.Submission{Language: language, SourceCode: codes, CompilerOption: `["cpp14", "o2"]`}
 
 	compileRes, err := judgeManger.Compile(ctx, sub)
 	assert.NotNil(t, compileRes)
