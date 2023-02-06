@@ -86,24 +86,25 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 		return nil, fmt.Errorf("compile config for %s not found", sub.Language)
 	}
 
-	var compileOptKeys []string
-	var compileOpts []string
-	if err := json.Unmarshal([]byte(sub.CompilerOption), &compileOptKeys); err != nil {
-		return nil, fmt.Errorf("failed to read compileOpts")
-	}
-	for _, optKey := range compileOptKeys {
-		opt, ok := compileConf.Options[optKey]
-		if !ok {
-			return nil, fmt.Errorf("compile option %s for %s not found", optKey, sub.Language)
-		}
-		compileOpts = append(compileOpts, opt)
-	}
-
 	args := lo.Filter(
 		strings.Split(compileConf.CompileCmd, " "),
 		func(str string, _ int) bool { return str != "" },
 	)
-	args = append(args, compileOpts...)
+
+	if sub.CompilerOption != "" {
+		var compileOptKeys []string
+		if err := json.Unmarshal([]byte(sub.CompilerOption), &compileOptKeys); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal compile options")
+		}
+
+		for _, optKey := range compileOptKeys {
+			opt, ok := compileConf.Options[optKey]
+			if !ok {
+				return nil, fmt.Errorf("compile option %s for %s not found", optKey, sub.Language)
+			}
+			args = append(args, opt)
+		}
+	}
 
 	res := <-m.worker.Execute(ctx, &worker.Request{
 		Cmd: []worker.Cmd{{
