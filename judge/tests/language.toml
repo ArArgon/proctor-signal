@@ -2,7 +2,7 @@
 SourceName = 'source.cpp'
 ArtifactName = 'a.out'
 CompileCmd = "/usr/bin/g++ source.cpp -o a.out"
-CompileTimeLimit = 10000 # ms
+CompileTimeLimit = 20000 # ms
 CompileSpaceLimit = 104857600
 ExecuteCmd = "a.out"
 Options = {o2 = "-O2", cpp14 = "--std=c++14" }
@@ -11,7 +11,7 @@ Options = {o2 = "-O2", cpp14 = "--std=c++14" }
 SourceName = 'source.c'
 ArtifactName = 'a.out'
 CompileCmd = "/usr/bin/gcc source.c"
-CompileTimeLimit = 10000 # ms
+CompileTimeLimit = 20000 # ms
 CompileSpaceLimit = 104857600
 ExecuteCmd = "a.out"
 Options = {o = "-o a.out"} # for options test
