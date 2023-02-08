@@ -245,7 +245,6 @@ func TestCompileMultiOptions(t *testing.T) {
 	assert.NoError(t, err)
 
 	sub := &model.Submission{Language: language, SourceCode: codes, CompilerOption: `["cpp14", "o2"]`}
-
 	compileRes, err := judgeManger.Compile(ctx, sub)
 	assert.NotNil(t, compileRes)
 	defer func() {
