@@ -9,6 +9,8 @@ message RegisterRequest {
   string secret = 1;
   string version = 2;
   string ip_address = 3;
+  string os = 5;
+  string arch = 6;
   // other metadata
   repeated string supported_languages = 20;
 }
