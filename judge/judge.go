@@ -2,6 +2,7 @@ package judge
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -88,8 +89,24 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 		return nil, fmt.Errorf("compile config for %s not found", sub.Language)
 	}
 
+	cmd := compileConf.CompileCmd
+	if sub.CompilerOption != "" {
+		var compileOptKeys []string
+		if err := json.Unmarshal([]byte(sub.CompilerOption), &compileOptKeys); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal compile options")
+		}
+
+		for _, optKey := range compileOptKeys {
+			opt, ok := compileConf.Options[optKey]
+			if !ok {
+				return nil, fmt.Errorf("compile option %s for %s not found", optKey, sub.Language)
+			}
+			cmd += " " + opt
+		}
+	}
+
 	args := lo.Filter(
-		strings.Split(compileConf.CompileCmd+" "+compileConf.Options[sub.CompilerOption], " "),
+		strings.Split(cmd, " "),
 		func(str string, _ int) bool { return str != "" },
 	)
 
