@@ -13,10 +13,8 @@ import (
 	"proctor-signal/model"
 )
 
-var (
-	// Regex
-	variableRegex = regexp.MustCompile(`\$(\{[\w_]+}|[\w_]+)`)
-)
+// Regex
+var variableRegex = regexp.MustCompile(`\$(\{[\w_]+}|[\w_]+)`)
 
 type languageConf struct {
 	raw config.LanguageConfEntity
@@ -25,7 +23,7 @@ type languageConf struct {
 	vars map[string]string
 }
 
-func getVarName(s string) string {
+func extractVar(s string) string {
 	s = strings.TrimLeft(s, "${")
 	return strings.TrimRight(s, "}")
 }
@@ -35,6 +33,10 @@ func split(s string) []string {
 		strings.Split(s, " "),
 		func(s string, _ int) bool { return s != "" },
 	)
+}
+
+func pair(k, v string) lo.Entry[string, string] {
+	return lo.Entry[string, string]{Key: k, Value: v}
 }
 
 func parseEnv(env string) (key string, val string, err error) {
@@ -78,7 +80,7 @@ func (l *languageConf) eval(val string, extra ...lo.Entry[string, string]) strin
 	table := lo.Assign(l.vars, lo.FromEntries(extra))
 	return variableRegex.ReplaceAllStringFunc(val, func(s string) string {
 		// ${Var} or $Var.
-		toReplace := getVarName(s)
+		toReplace := extractVar(s)
 		if replaced, has := table[toReplace]; has {
 			return replaced
 		}
@@ -125,8 +127,9 @@ func (l *languageConf) evalCompileCmd(sub *model.Submission) ([]string, error) {
 		compileOptKeys[i] = opt
 	}
 
-	args := lo.Entry[string, string]{Key: "Args", Value: strings.Join(compileOptKeys, " ")}
-	return split(l.eval(l.vars["CompileCmd"], args)), nil
+	return split(l.eval(
+		l.vars["CompileCmd"], pair("Args", strings.Join(compileOptKeys, " ")),
+	)), nil
 }
 
 func (l *languageConf) getRunCmd() []string {
