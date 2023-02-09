@@ -16,15 +16,19 @@ var (
 
 type JudgeConfig judgeconfig.Config
 
-type LanguageConf map[string]struct {
+type LanguageConfEntity struct {
 	SourceName        string            `yaml:"SourceName"`
 	ArtifactName      string            `yaml:"ArtifactName"`
+	Compiler          string            `yaml:"Compiler"`
 	CompileCmd        string            `yaml:"CompileCmd"`
 	CompileTimeLimit  uint32            `yaml:"CompileTimeLimit"`
 	CompileSpaceLimit uint64            `yaml:"CompileSpaceLimit"`
 	ExecuteCmd        string            `yaml:"ExecuteCmd"`
+	Environment       []string          `yaml:"Environment"`
 	Options           map[string]string `yaml:"Options"`
 }
+
+type LanguageConf map[string]LanguageConfEntity
 
 type Config struct {
 	Level   string `default:"dev" env:"RELEASE" validate:"oneof=production dev debug"` // `production`, `dev`, `debug`
@@ -42,7 +46,8 @@ type Config struct {
 	}
 	GoJudgeConf  *JudgeConfig
 	JudgeOptions struct {
-		MaxTruncatedOutput uint `default:"10240"`
+		MaxTruncatedOutput uint     `default:"10240"`
+		Environment        []string `default:"[\"PATH=/usr/bin:/bin\"]"`
 	}
 	LanguageConf LanguageConf
 }
