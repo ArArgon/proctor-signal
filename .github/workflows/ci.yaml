@@ -6,6 +6,10 @@ on:
 permissions:
   contents: read
   pull-requests: read
+
+env:
+  IMAGE_NAME: proctor_signal
+
 jobs:
   lint:
     runs-on: ubuntu-20.04
@@ -43,14 +47,21 @@ jobs:
   build-image:
     runs-on: ubuntu-latest
     needs: [unit-test]
+    permissions:
+      packages: write
     steps:
-      - uses: actions/checkout@v3
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
+      - name: Log in to GitHub Packages
+        # This is where you will update the personal access token to GITHUB_TOKEN
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
       - name: Build (and push) Docker image
         uses: docker/build-push-action@v4
         with:
           context: .
           file: ./Dockerfile
           push: ${{ github.ref == 'refs/heads/main' }}
-          tags: ghcr.io/arargon/proctor_signal:latest
+          tags: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.description=Signal judge executor image
