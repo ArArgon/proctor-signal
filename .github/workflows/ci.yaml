@@ -52,4 +52,4 @@ jobs:
           context: .
           file: ./Dockerfile
           push: ${{ github.ref == 'refs/heads/main' }}
-          tags: ghcr.io/ArArgon/proctor_signal:latest
+          tags: ghcr.io/arargon/proctor_signal:latest
