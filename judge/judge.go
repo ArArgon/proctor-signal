@@ -77,6 +77,9 @@ type JudgeRes struct {
 }
 
 func (m *Manager) RemoveFiles(fileIDs map[string]string) {
+	if fileIDs == nil {
+		return
+	}
 	_, err := m.fs.BulkRemove(lo.Values(fileIDs))
 	if err != nil {
 		m.logger.Sugar().With("err", err).Error("failed to remove files: %+v", fileIDs)
