@@ -352,15 +352,14 @@ func compare(expected, actual io.Reader, buffLen int) (bool, error) {
 			return false, err
 		}
 
-		if expectedOutputBuff[expectedLen-1] == '\n' || expectedOutputBuff[expectedLen-1] == ' ' {
-			expectedLen--
-		}
-		if actualOutputBuff[actualLen-1] == ' ' || actualOutputBuff[actualLen-1] == '\n' {
-			// cut off ' ' or '\n' at the end of executeOutputBuff
-			actualLen--
-		}
-
-		if actualLen != expectedLen {
+		if actualLen == expectedLen+1 {
+			if actualOutputBuff[actualLen-1] == ' ' || actualOutputBuff[actualLen-1] == '\n' {
+				// cut off ' ' or '\n' at the end of executeOutputBuff
+				actualLen--
+			} else {
+				return false, nil
+			}
+		} else if actualLen > expectedLen+1 || actualLen < expectedLen {
 			return false, nil
 		}
 
