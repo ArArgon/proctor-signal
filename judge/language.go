@@ -14,7 +14,10 @@ import (
 )
 
 // Regex
-var variableRegex = regexp.MustCompile(`\$(\{[\w_]+}|[\w_]+)`)
+var (
+	variableRegex = regexp.MustCompile(`\$\{([\w_]+)}|\$([\w_]+)`)
+	validVar      = regexp.MustCompile(`^'([^']*)'|"([^"]*)"|([^'"]*)$`)
+)
 
 type languageConf struct {
 	raw config.LanguageConfEntity
@@ -24,8 +27,8 @@ type languageConf struct {
 }
 
 func extractVar(s string) string {
-	s = strings.TrimLeft(s, "${")
-	return strings.TrimRight(s, "}")
+	part := variableRegex.FindStringSubmatch(s)
+	return lo.Compact(part[1:])[0]
 }
 
 func split(s string) []string {
@@ -45,7 +48,10 @@ func parseEnv(env string) (key string, val string, err error) {
 		return "", "", errors.Errorf("invalid environment string: %s", env)
 	}
 	// Trim quotes.
-	val = strings.TrimLeft(strings.TrimRight(val, `"'`), `"'`)
+	if !validVar.MatchString(val) {
+		return "", "", errors.Errorf("invalid environment string: %s", env)
+	}
+	val = lo.Compact(validVar.FindStringSubmatch(val)[1:])[0]
 	return
 }
 
@@ -91,12 +97,10 @@ func (l *languageConf) eval(val string, extra ...lo.Entry[string, string]) strin
 func (l *languageConf) normalize() error {
 	// Normalize env.
 	for _, envStr := range l.raw.Environment {
-		key, val, ok := strings.Cut(envStr, "=")
-		if !ok {
-			return errors.Errorf("invalid environment string: %s", envStr)
+		key, val, err := parseEnv(envStr)
+		if err != nil {
+			return err
 		}
-		// Trim quotes.
-		val = strings.TrimLeft(strings.TrimRight(val, `"'`), `"'`)
 		val = l.eval(val)
 
 		l.env[key] = val
