@@ -114,7 +114,7 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 		Cmd: []worker.Cmd{{
 			Env:         []string{"PATH=/usr/bin:/bin", "SourceName=" + compileConf.SourceName, "ArtifactName=" + compileConf.ArtifactName},
 			Args:        args,
-			CPULimit:    time.Duration(compileConf.CompileTimeLimit * 1000000),
+			CPULimit:    time.Duration(compileConf.CompileTimeLimit) * time.Millisecond,
 			MemoryLimit: runner.Size(compileConf.CompileSpaceLimit),
 			ProcLimit:   50,
 			Files: []worker.CmdFile{
@@ -352,14 +352,15 @@ func compare(expected, actual io.Reader, buffLen int) (bool, error) {
 			return false, err
 		}
 
-		if actualLen == expectedLen+1 {
-			if actualOutputBuff[actualLen-1] == ' ' || actualOutputBuff[actualLen-1] == '\n' {
-				// cut off ' ' or '\n' at the end of executeOutputBuff
-				actualLen--
-			} else {
-				return false, nil
-			}
-		} else if actualLen > expectedLen+1 || actualLen < expectedLen {
+		if expectedOutputBuff[expectedLen-1] == '\n' || expectedOutputBuff[expectedLen-1] == ' ' {
+			expectedLen--
+		}
+		if actualOutputBuff[actualLen-1] == ' ' || actualOutputBuff[actualLen-1] == '\n' {
+			// cut off ' ' or '\n' at the end of executeOutputBuff
+			actualLen--
+		}
+
+		if actualLen != expectedLen {
 			return false, nil
 		}
 
