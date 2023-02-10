@@ -55,13 +55,14 @@ jobs:
       - name: Log in to GitHub Packages
         # This is where you will update the personal access token to GITHUB_TOKEN
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
+      - name: Down-case owner
+        run: |
+          echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >>${GITHUB_ENV}
       - name: Build (and push) Docker image
         uses: docker/build-push-action@v4
         with:
-          context: .
-          file: ./Dockerfile
           push: ${{ github.ref == 'refs/heads/main' }}
-          tags: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest
+          tags: ghcr.io/${{ env.OWNER }}/${{ env.IMAGE_NAME }}:latest
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.description=Signal judge executor image
