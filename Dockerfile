@@ -35,7 +35,7 @@ RUN if [[ $BUILD_LOCATION = "cn" ]] ; then \
     fi
 
 RUN apt update && \
-    apt-get --no-install-recommends install -y gcc g++ fpc=3.0.4 python3 openjdk-11-jdk openjdk-17-jdk openjdk-8-jdk
+    apt-get --no-install-recommends install -y gcc g++ python3 openjdk-11-jdk openjdk-17-jdk openjdk-8-jdk
 
 COPY --from=compile /build/proctor ./
 COPY --from=compile /build/conf ./conf
