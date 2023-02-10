@@ -42,6 +42,7 @@ jobs:
       - run: gotestsum -- -exec sudo -race -cover ./...
   build-image:
     runs-on: ubuntu-latest
+    needs: [unit-test]
     steps:
       - uses: actions/checkout@v3
       - name: Set up Docker Buildx
