@@ -25,6 +25,7 @@ type LanguageConfEntity struct {
 	CompileSpaceLimit uint64            `yaml:"CompileSpaceLimit"`
 	ExecuteCmd        string            `yaml:"ExecuteCmd"`
 	Environment       []string          `yaml:"Environment"`
+	ResourceFactor    uint64            `default:"1" yaml:"ResourceFactor"`
 	Options           map[string]string `yaml:"Options"`
 }
 
