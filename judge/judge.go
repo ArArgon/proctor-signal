@@ -256,8 +256,9 @@ func (m *Manager) Judge(
 	}
 
 	executeRes, err := m.Execute(
-		ctx, strings.Join(conf.getRunCmd(), " "), &worker.CachedFile{FileID: fsKey(p, testcase.InputKey)},
-		copyInFileIDs, CPULimit, memoryLimit,
+		ctx, strings.Join(conf.getRunCmd(), " "),
+		&worker.CachedFile{FileID: fsKey(p, testcase.InputKey)}, copyInFileIDs,
+		CPULimit*time.Duration(conf.raw.ResourceFactor), memoryLimit*runner.Size(conf.raw.ResourceFactor),
 	)
 	if executeRes == nil {
 		return nil, err
