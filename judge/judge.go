@@ -2,7 +2,6 @@ package judge
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -28,13 +27,18 @@ const maxCompilerStderrSize = 1 * 1024 * 1024 // 1 MiB
 
 func NewJudgeManager(
 	worker worker.Worker, conf *config.Config, fs *resource.FileStore, logger *zap.Logger,
-) *Manager {
+) (*Manager, error) {
+	lang, err := newLanguageConfigs(conf.LanguageConf, conf.JudgeOptions.Environment)
+	if err != nil {
+		return nil, err
+	}
 	return &Manager{
 		fs:     fs,
 		worker: worker,
 		conf:   conf,
+		lang:   lang,
 		logger: logger,
-	}
+	}, nil
 }
 
 type JudgeOptions struct {
@@ -45,6 +49,7 @@ type Manager struct {
 	worker worker.Worker
 	fs     *resource.FileStore // share with worker
 	conf   *config.Config
+	lang   map[string]*languageConf
 	logger *zap.Logger
 }
 
@@ -84,38 +89,22 @@ func (m *Manager) RemoveFiles(fileIDs map[string]string) {
 }
 
 func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileRes, error) {
-	compileConf, ok := m.conf.LanguageConf[sub.Language]
+	compileConf, ok := m.lang[sub.Language]
 	if !ok {
 		return nil, fmt.Errorf("compile config for %s not found", sub.Language)
 	}
 
-	cmd := compileConf.CompileCmd
-	if sub.CompilerOption != "" {
-		var compileOptKeys []string
-		if err := json.Unmarshal([]byte(sub.CompilerOption), &compileOptKeys); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal compile options")
-		}
-
-		for _, optKey := range compileOptKeys {
-			opt, ok := compileConf.Options[optKey]
-			if !ok {
-				return nil, fmt.Errorf("compile option %s for %s not found", optKey, sub.Language)
-			}
-			cmd += " " + opt
-		}
+	args, err := compileConf.evalCompileCmd(sub)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compose compilation Cmd, err: %+v", err)
 	}
-
-	args := lo.Filter(
-		strings.Split(cmd, " "),
-		func(str string, _ int) bool { return str != "" },
-	)
 
 	res := <-m.worker.Execute(ctx, &worker.Request{
 		Cmd: []worker.Cmd{{
-			Env:         []string{"PATH=/usr/bin:/bin", "SourceName=" + compileConf.SourceName, "ArtifactName=" + compileConf.ArtifactName},
+			Env:         compileConf.getEnvs(),
 			Args:        args,
-			CPULimit:    time.Duration(compileConf.CompileTimeLimit) * time.Millisecond,
-			MemoryLimit: runner.Size(compileConf.CompileSpaceLimit),
+			CPULimit:    time.Duration(compileConf.raw.CompileTimeLimit) * time.Millisecond,
+			MemoryLimit: runner.Size(compileConf.raw.CompileSpaceLimit),
 			ProcLimit:   50,
 			Files: []worker.CmdFile{
 				&worker.MemoryFile{Content: []byte("")},
@@ -123,10 +112,10 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 				&worker.Collector{Name: "stderr", Max: maxCompilerStderrSize},
 			},
 			CopyIn: map[string]worker.CmdFile{
-				compileConf.SourceName: &worker.MemoryFile{Content: sub.SourceCode},
+				compileConf.getSourceName(): &worker.MemoryFile{Content: sub.SourceCode},
 			},
 			CopyOutCached: []worker.CmdCopyOutFile{
-				{Name: compileConf.ArtifactName, Optional: true},
+				{Name: compileConf.getArtifactName(), Optional: true},
 			},
 			CopyOut: []worker.CmdCopyOutFile{
 				{Name: "stdout"},
@@ -151,7 +140,6 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 	}
 
 	// read compile output
-	var err error
 	var f *os.File
 	f, ok = result.Files["stdout"]
 	if ok {
@@ -170,7 +158,7 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 
 	// cache files
 	compileRes.ArtifactFileIDs = result.FileIDs
-	if _, ok = result.FileIDs[compileConf.ArtifactName]; !ok && result.Status == envexec.StatusAccepted {
+	if _, ok = result.FileIDs[compileConf.getArtifactName()]; !ok && result.Status == envexec.StatusAccepted {
 		return compileRes, errors.New("failed to cache ArtifactFile")
 	}
 
@@ -259,13 +247,13 @@ func (m *Manager) Judge(
 	ctx context.Context, p *model.Problem, language string, copyInFileIDs map[string]string,
 	testcase *model.TestCase, CPULimit time.Duration, memoryLimit runner.Size,
 ) (*JudgeRes, error) {
-	conf, ok := m.conf.LanguageConf[language]
+	conf, ok := m.lang[language]
 	if !ok {
 		return nil, fmt.Errorf("config for %s not found", language)
 	}
 
 	executeRes, err := m.Execute(
-		ctx, conf.ExecuteCmd, &worker.CachedFile{FileID: fsKey(p, testcase.InputKey)},
+		ctx, strings.Join(conf.getRunCmd(), " "), &worker.CachedFile{FileID: fsKey(p, testcase.InputKey)},
 		copyInFileIDs, CPULimit, memoryLimit,
 	)
 	if executeRes == nil {
@@ -325,7 +313,7 @@ func (m *Manager) Judge(
 	// Cache executeRes.Stdout as judge output
 	f, ok := executeRes.Stdout.(*os.File)
 	if ok {
-		judgeRes.OutputID, err = m.fs.Add("Stdin", f.Name())
+		judgeRes.OutputID, err = m.fs.Add("Stdout", f.Name())
 		if err != nil {
 			return judgeRes, err
 		}

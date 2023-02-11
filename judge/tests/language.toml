@@ -1,7 +1,8 @@
 [languageConf.cpp]
 SourceName = 'source.cpp'
 ArtifactName = 'a.out'
-CompileCmd = "/usr/bin/g++ source.cpp -o a.out"
+Compiler = '/usr/bin/g++'
+CompileCmd = "$Compiler $Args ${SourceName} -o ${ArtifactName}"
 CompileTimeLimit = 20000 # ms
 CompileSpaceLimit = 104857600
 ExecuteCmd = "a.out"

@@ -1,16 +1,18 @@
 [languageConf.cpp]
 SourceName = 'source.cpp'
 ArtifactName = 'a.out'
-CompileCmd = "/usr/bin/g++ source.cpp -o a.out"
-CompileTimeLimit = 10000 # ms
+Compiler = '/usr/bin/g++'
+CompileCmd = "$Compiler $Args ${SourceName} -o ${ArtifactName}"
+CompileTimeLimit = 20000 # ms
 CompileSpaceLimit = 104857600
 ExecuteCmd = "a.out"
-Options = {  o2 = "-O2", cpp14 = "--std=c++14" }
+Options = { o2 = "-O2", cpp14 = "--std=c++14" }
 
 [languageConf.c]
 SourceName = 'source.c'
 ArtifactName = 'a.out'
-CompileCmd = "/usr/bin/gcc source.c"
+Compiler = '/usr/bin/gcc'
+CompileCmd = "$Compiler $Args ${SourceName} -o ${ArtifactName}"
 CompileTimeLimit = 10000 # ms
 CompileSpaceLimit = 104857600
 ExecuteCmd = "a.out"
@@ -19,7 +21,9 @@ ExecuteCmd = "a.out"
 SourceName = 'Source.java'
 ArtifactName = 'Source.class'
 Environment = [ "JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64" ]
-CompileCmd = "/usr/bin/java Source.java"
+Compiler = '$JAVA_HOME/bin/javac'
+CompileCmd = "$Compiler $Args $SourceName"
 CompileTimeLimit = 20000 # ms
 CompileSpaceLimit = 104857600
-ExecuteCmd = "/usr/bin/java -jar Source.class"
+ExecuteCmd = "$JAVA_HOME/bin/java -jar $ArtifactName"
+Options = { "java11" = "--source 11", "java8" = "--source 8" }
