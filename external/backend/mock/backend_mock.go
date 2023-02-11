@@ -153,24 +153,24 @@ func (mr *MockClientMockRecorder) GetResourceStream(arg0, arg1, arg2 interface{}
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetResourceStream", reflect.TypeOf((*MockClient)(nil).GetResourceStream), arg0, arg1, arg2)
 }
 
-// GracefulExit mocks base method.
-func (m *MockClient) GracefulExit(arg0 context.Context, arg1 *backend.GracefulExitRequest, arg2 ...grpc.CallOption) (*backend.GracefulExitResponse, error) {
+// Ping mocks base method.
+func (m *MockClient) Ping(arg0 context.Context, arg1 *backend.PingRequest, arg2 ...grpc.CallOption) (*backend.PingResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "GracefulExit", varargs...)
-	ret0, _ := ret[0].(*backend.GracefulExitResponse)
+	ret := m.ctrl.Call(m, "Ping", varargs...)
+	ret0, _ := ret[0].(*backend.PingResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GracefulExit indicates an expected call of GracefulExit.
-func (mr *MockClientMockRecorder) GracefulExit(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+// Ping indicates an expected call of Ping.
+func (mr *MockClientMockRecorder) Ping(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GracefulExit", reflect.TypeOf((*MockClient)(nil).GracefulExit), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ping", reflect.TypeOf((*MockClient)(nil).Ping), varargs...)
 }
 
 // PutResource mocks base method.

@@ -8,7 +8,9 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.uber.org/zap"
@@ -18,6 +20,9 @@ import (
 
 	"proctor-signal/config"
 )
+
+const pingInterval = time.Second * 5
+const pingRetryInterval = time.Millisecond * 500
 
 type Client interface {
 	BackendServiceClient
@@ -43,7 +48,9 @@ type client struct {
 }
 
 // NewBackendClient builds a backend.Client with given configurations.
-func NewBackendClient(ctx context.Context, logger *zap.Logger, conf *config.Config) (Client, error) {
+func NewBackendClient(
+	ctx context.Context, logger *zap.Logger, conf *config.Config, cancel context.CancelFunc,
+) (Client, error) {
 	// gRPC connections.
 	cred := lo.Ternary(conf.Backend.InsecureGrpc,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -89,12 +96,15 @@ func NewBackendClient(ctx context.Context, logger *zap.Logger, conf *config.Conf
 		sugar.With("err", err).Error("failed to compose api url")
 		return nil, errors.WithMessage(err, "failed to compose api url")
 	}
-	return &client{
+
+	cli := &client{
 		BackendServiceClient: NewBackendServiceClient(backendConn),
 		auth:                 auth,
 		baseURL:              baseURL,
 		httpCli:              &http.Client{Transport: auth},
-	}, nil
+	}
+	go cli.ping(ctx, sugar, cancel)
+	return cli, nil
 }
 
 func (c *client) GetResourceStream(
@@ -184,12 +194,39 @@ func (c *client) PutResourceStream(
 }
 
 func (c *client) ReportExit(ctx context.Context, reason string) error {
-	_, err := c.GracefulExit(ctx, &GracefulExitRequest{
-		Reason:     reason,
-		InstanceId: c.auth.instanceID,
-	})
-	if err != nil {
+	if err := c.auth.reportExit(ctx, reason); err != nil {
 		return errors.WithMessage(err, "failed to inform the backend server")
 	}
 	return nil
+}
+
+func (c *client) ping(ctx context.Context, sugar *zap.SugaredLogger, cancel context.CancelFunc) {
+	tick := time.NewTicker(pingInterval)
+	for {
+		select {
+		case <-tick.C:
+			err := backoff.Retry(
+				func() error {
+					resp, err := c.Ping(ctx, &PingRequest{})
+					if err != nil {
+						return err
+					}
+					if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+						return errors.Errorf("ping error, message: %s", resp.GetMessage())
+					}
+					return nil
+				}, backoff.WithContext(
+					backoff.WithMaxRetries(backoff.NewConstantBackOff(pingRetryInterval), 5), ctx,
+				),
+			)
+			if err != nil {
+				// Halt.
+				sugar.With("err", err).Errorf("failed to ping, disconnecting from the backend")
+				cancel()
+			}
+		case <-ctx.Done():
+			tick.Stop()
+			return
+		}
+	}
 }

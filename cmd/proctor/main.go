@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/criyle/go-judge/filestore"
@@ -29,7 +30,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	logger.Info("connecting to the backend...")
-	backendCli := lo.Must(backend.NewBackendClient(ctx, logger, conf))
+	backendCli := lo.Must(backend.NewBackendClient(ctx, logger, conf, cancel))
 	logger.Info("Successfully connected to the backend")
 
 	defer func() { _ = logger.Sync() }()
@@ -61,9 +62,12 @@ func main() {
 
 	// Graceful shutdown...
 	sig := make(chan os.Signal, 3)
-	signal.Notify(sig, os.Interrupt)
-	<-sig
-	signal.Reset(os.Interrupt)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	select {
+	case <-sig:
+		signal.Reset(os.Interrupt)
+	case <-ctx.Done():
+	}
 
 	sugar.Info("Shutting Down...")
 	cancel()
@@ -74,6 +78,7 @@ func main() {
 	if err := backendCli.ReportExit(ctx, "exiting"); err != nil {
 		sugar.With("err", err).Warn("failed to exit gracefully")
 	}
+	sugar.Info("disconnected from the backend")
 	gojudge.CleanUpWorker(work)
 	err := fsCleanUp()
 
