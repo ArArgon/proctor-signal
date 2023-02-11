@@ -7,6 +7,7 @@ CompileTimeLimit = 20000 # ms
 CompileSpaceLimit = 134217728 # 128MB
 ExecuteCmd = "a.out"
 Options = { o2 = "-O2", cpp14 = "--std=c++14" }
+ResourceFactor = 1
 
 [languageConf.c]
 SourceName = 'source.c'
@@ -16,6 +17,7 @@ CompileCmd = "$Compiler $Args ${SourceName} -o ${ArtifactName}"
 CompileTimeLimit = 10000 # ms
 CompileSpaceLimit = 134217728 # 128MB
 ExecuteCmd = "a.out"
+ResourceFactor = 1
 
 [languageConf.java]
 SourceName = '$CLASS_NAME.java'

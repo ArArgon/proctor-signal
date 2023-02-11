@@ -7,6 +7,7 @@ CompileTimeLimit = 20000 # ms
 CompileSpaceLimit = 104857600
 ExecuteCmd = "a.out"
 Options = {o2 = "-O2", cpp14 = "--std=c++14" }
+ResourceFactor = 1
 
 [languageConf.c]
 SourceName = 'source.c'
@@ -16,4 +17,5 @@ CompileTimeLimit = 20000 # ms
 CompileSpaceLimit = 104857600
 ExecuteCmd = "a.out"
 Options = {o = "-o a.out"} # for options test
+ResourceFactor = 1
 
