@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/criyle/go-judge/filestore"
 	"github.com/samber/lo"
 	"go.uber.org/zap"
@@ -30,7 +31,15 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	logger.Info("connecting to the backend...")
-	backendCli := lo.Must(backend.NewBackendClient(ctx, logger, conf, cancel))
+	var backendCli backend.Client
+	err := backoff.Retry(func() error {
+		var err error
+		backendCli, err = backend.NewBackendClient(ctx, logger, conf, cancel)
+		return err
+	}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 8))
+	if err != nil {
+		logger.Sugar().With("err", err).Fatalf("failed to connect to the backend after retries")
+	}
 	logger.Info("Successfully connected to the backend")
 
 	defer func() { _ = logger.Sync() }()
@@ -80,7 +89,7 @@ func main() {
 	}
 	sugar.Info("disconnected from the backend")
 	gojudge.CleanUpWorker(work)
-	err := fsCleanUp()
+	err = fsCleanUp()
 
 	go func() {
 		logger.Sugar().Info("Shutdown Finished ", err)
