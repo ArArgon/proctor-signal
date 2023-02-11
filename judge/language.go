@@ -145,3 +145,11 @@ func (l *languageConf) getEnvs() []string {
 		return fmt.Sprintf(`%s=%s`, ent.Key, ent.Value)
 	})
 }
+
+func (l *languageConf) getSourceName() string {
+	return l.vars["SourceName"]
+}
+
+func (l *languageConf) getArtifactName() string {
+	return l.vars["ArtifactName"]
+}
