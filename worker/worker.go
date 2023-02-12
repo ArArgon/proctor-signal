@@ -323,35 +323,35 @@ func (w *Worker) truncateOutput(executeRes judge.ExecuteRes) *string {
 		if executeRes.StdoutSize > int64(w.conf.JudgeOptions.MaxTruncatedOutput)/2 &&
 			executeRes.StderrSize < int64(w.conf.JudgeOptions.MaxTruncatedOutput)/2 {
 			// read all executeRes.Stderr
-			output = *truncateStdout(executeRes.Stdout, int64(w.conf.JudgeOptions.MaxTruncatedOutput)-executeRes.StderrSize)
+			output = truncateStdout(executeRes.Stdout, int64(w.conf.JudgeOptions.MaxTruncatedOutput)-executeRes.StderrSize)
 			if executeRes.StderrSize != 0 {
-				output += *truncateStderr(executeRes.Stderr, -1)
+				output += truncateStderr(executeRes.Stderr, -1)
 			}
 		} else if executeRes.StdoutSize < int64(w.conf.JudgeOptions.MaxTruncatedOutput)/2 &&
 			executeRes.StderrSize > int64(w.conf.JudgeOptions.MaxTruncatedOutput)/2 {
 			// read all executeRes.Stdout
 			if executeRes.StdoutSize != 0 {
-				output = *truncateStdout(executeRes.Stdout, -1)
+				output = truncateStdout(executeRes.Stdout, -1)
 			}
-			output += *truncateStderr(executeRes.Stderr, int64(w.conf.JudgeOptions.MaxTruncatedOutput)-executeRes.StdoutSize)
+			output += truncateStderr(executeRes.Stderr, int64(w.conf.JudgeOptions.MaxTruncatedOutput)-executeRes.StdoutSize)
 		} else {
 			// read both half
-			output = *truncateStdout(executeRes.Stdout, int64(w.conf.JudgeOptions.MaxTruncatedOutput)) +
-				*truncateStderr(executeRes.Stderr, int64(w.conf.JudgeOptions.MaxTruncatedOutput))
+			output = truncateStdout(executeRes.Stdout, int64(w.conf.JudgeOptions.MaxTruncatedOutput)) +
+				truncateStderr(executeRes.Stderr, int64(w.conf.JudgeOptions.MaxTruncatedOutput))
 		}
 	} else {
 		// read all
 		if executeRes.StdoutSize != 0 {
-			output = *truncateStdout(executeRes.Stdout, -1)
+			output = truncateStdout(executeRes.Stdout, -1)
 		}
 		if executeRes.StderrSize != 0 {
-			output += *truncateStderr(executeRes.Stderr, -1)
+			output += truncateStderr(executeRes.Stderr, -1)
 		}
 	}
 	return &output
 }
 
-func truncateStdout(stdout *os.File, buffLen int64) *string {
+func truncateStdout(stdout *os.File, buffLen int64) string {
 	var res string
 	if buffLen == -1 {
 		if buff, err := io.ReadAll(stdout); err != nil {
@@ -368,10 +368,10 @@ func truncateStdout(stdout *os.File, buffLen int64) *string {
 		}
 	}
 
-	return &res
+	return res
 }
 
-func truncateStderr(stderr *os.File, buffLen int64) *string {
+func truncateStderr(stderr *os.File, buffLen int64) string {
 	var res string
 	if buffLen == -1 {
 		if buff, err := io.ReadAll(stderr); err != nil {
@@ -388,7 +388,7 @@ func truncateStderr(stderr *os.File, buffLen int64) *string {
 		}
 	}
 
-	return &res
+	return res
 }
 
 func (w *Worker) removeOutputFiles(sugar *zap.SugaredLogger, outputFileCaches []*os.File) {
