@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"io"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/criyle/go-judge/envexec"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"proctor-signal/config"
 	"proctor-signal/external/backend"
 	"proctor-signal/judge"
 	"proctor-signal/model"
@@ -28,19 +30,21 @@ type Worker struct {
 	judge      *judge.Manager
 	resManager *resource.Manager
 	backend    backend.BackendServiceClient
+	conf       *config.Config
 }
 
 const maxTimeout = time.Minute * 10
 const backoffInterval = time.Millisecond * 500
 
 func NewWorker(
-	judgeManager *judge.Manager, resManager *resource.Manager, backendCli backend.BackendServiceClient,
+	judgeManager *judge.Manager, resManager *resource.Manager, backendCli backend.BackendServiceClient, conf *config.Config,
 ) *Worker {
 	return &Worker{
 		wg:         new(sync.WaitGroup),
 		judge:      judgeManager,
 		resManager: resManager,
 		backend:    backendCli,
+		conf:       conf,
 	}
 }
 
@@ -120,15 +124,19 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 	}
 	defer unlock()
 
+	outputFileCaches := make([]*os.File, 0)
+	defer w.removeOutputFiles(sugar, outputFileCaches)
+	// TODO: upload output files to OSS before it was deleted
+
 	// Compile source code.
-	artifactIDs, abort, err := w.compile(ctx, sugar, sub, result)
+	artifactIDs, abort, err := w.compile(ctx, sugar, sub, result, outputFileCaches)
 	if abort {
 		return &backend.CompleteJudgeTaskRequest{Result: result}, err
 	}
 	defer w.judge.RemoveFiles(artifactIDs)
 
 	// Judge on the DAG.
-	subtasks, err := w.judgeOnDAG(ctx, sugar, sub, p, artifactIDs)
+	subtasks, err := w.judgeOnDAG(ctx, sugar, sub, p, artifactIDs, outputFileCaches)
 	if err != nil {
 		// internal err.
 		internErr(result, "an internal error occured during judgement: ", err.Error())
@@ -147,7 +155,6 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 			result.Conclusion = s.Conclusion
 		}
 	}
-
 	return &backend.CompleteJudgeTaskRequest{Result: result}, nil
 }
 
@@ -188,15 +195,12 @@ func (w *Worker) fetch(ctx context.Context, sugar *zap.SugaredLogger,
 func (w *Worker) compile(
 	ctx context.Context, sugar *zap.SugaredLogger,
 	sub *model.Submission, result *model.JudgeResult,
+	outputFileCaches []*os.File,
 ) (artifactIDs map[string]string, abort bool, err error) {
 	compileRes, err := w.judge.Compile(ctx, sub)
-
-	defer func() {
-		if compileRes != nil {
-			_ = compileRes.Stdout.Close()
-			_ = compileRes.Stderr.Close()
-		}
-	}()
+	if compileRes != nil {
+		outputFileCaches = append(outputFileCaches, compileRes.Stdout, compileRes.Stderr)
+	}
 
 	if err != nil {
 		// Internal error.
@@ -208,8 +212,7 @@ func (w *Worker) compile(
 	}
 
 	result.ErrMessage = lo.ToPtr(compileRes.Error)
-	compilerStderr, _ := io.ReadAll(compileRes.Stderr)
-	result.CompilerOutput = lo.ToPtr(string(compilerStderr))
+	result.CompilerOutput = w.truncatedOutput(compileRes.ExecuteRes)
 
 	if compileRes.Status != envexec.StatusAccepted {
 		// Compile error (not an internal error).
@@ -223,7 +226,7 @@ func (w *Worker) compile(
 func (w *Worker) judgeOnDAG(
 	ctx context.Context, sugar *zap.SugaredLogger,
 	sub *model.Submission, p *model.Problem,
-	artifactIDs map[string]string,
+	artifactIDs map[string]string, outputFileCaches []*os.File,
 ) (subResults []*model.SubtaskResult, err error) {
 	// Compose the DAG.
 	dag := model.NewSubtaskGraph(p)
@@ -256,6 +259,10 @@ func (w *Worker) judgeOnDAG(
 			judgeRes, err = w.judge.Judge(
 				ctx, p, sub.Language, artifactIDs, testcase, timeLimit, spaceLimit,
 			)
+			if judgeRes != nil {
+				outputFileCaches = append(outputFileCaches, judgeRes.Stdout, judgeRes.Stderr)
+			}
+
 			if err != nil {
 				sugar.With("err", err).Error("failed to judge")
 				caseResult.Conclusion = model.Conclusion_InternalError
@@ -267,12 +274,9 @@ func (w *Worker) judgeOnDAG(
 			caseResult.TotalTime = uint32(judgeRes.TotalTime.Milliseconds())
 			caseResult.TotalSpace = float32(judgeRes.TotalSpace.KiB()) / 1024
 			caseResult.ReturnValue = int32(judgeRes.ExitStatus)
-			caseResult.TruncatedOutput = &judgeRes.TruncatedOutput
 
-			if judgeRes.OutputID != "" {
-				caseResult.OutputKey = judgeRes.OutputID
-				caseResult.OutputSize = uint64(judgeRes.OutputSize)
-			}
+			judgeRes.StderrSize = 0 // ignore stderr
+			caseResult.TruncatedOutput = w.truncatedOutput(judgeRes.ExecuteRes)
 
 			subResult.TotalTime += caseResult.TotalTime
 			if subResult.TotalSpace < caseResult.TotalSpace {
@@ -302,6 +306,79 @@ func (w *Worker) judgeOnDAG(
 
 	subResults = lo.Values(score)
 	return
+}
+
+func (w *Worker) truncatedOutput(executeRes judge.ExecuteRes) *string {
+	var output string
+	if executeRes.StdoutSize+executeRes.StderrSize > int64(w.conf.JudgeOptions.MaxTruncatedOutput) {
+		if executeRes.StdoutSize > int64(w.conf.JudgeOptions.MaxTruncatedOutput)/2 &&
+			executeRes.StderrSize < int64(w.conf.JudgeOptions.MaxTruncatedOutput)/2 {
+			// read all executeRes.Stderr
+			buff := make([]byte, int64(w.conf.JudgeOptions.MaxTruncatedOutput)-executeRes.StderrSize)
+			if _, err := io.ReadFull(executeRes.Stdout, buff); err != nil {
+				output = "===stdout:\nfailed to read stdout\n"
+			} else {
+				output = "===stdout:\n" + string(buff) + "\n"
+			}
+
+			if executeRes.StderrSize != 0 {
+				if buff, err := io.ReadAll(executeRes.Stderr); err != nil {
+					output += "===stderr:\nfailed to read stderr\n"
+				} else {
+					output += "===stderr:\n" + string(buff) + "\n"
+				}
+			}
+		} else if executeRes.StdoutSize < int64(w.conf.JudgeOptions.MaxTruncatedOutput)/2 &&
+			executeRes.StderrSize > int64(w.conf.JudgeOptions.MaxTruncatedOutput)/2 {
+			// read all executeRes.Stdout
+			if executeRes.StdoutSize != 0 {
+				if buff, err := io.ReadAll(executeRes.Stdout); err != nil {
+					output = "===stdout:\nfailed to read stdout\n"
+				} else {
+					output = "===stdout:\n" + string(buff) + "\n"
+				}
+			}
+
+			buff := make([]byte, int64(w.conf.JudgeOptions.MaxTruncatedOutput)-executeRes.StdoutSize)
+			if _, err := io.ReadFull(executeRes.Stdout, buff); err != nil {
+				output = "===stdout:\nfailed to read stdout\n"
+			} else {
+				output = "===stdout:\n" + string(buff) + "\n"
+			}
+		}
+	} else {
+		// read all
+		if executeRes.StdoutSize != 0 {
+			if buff, err := io.ReadAll(executeRes.Stdout); err != nil {
+				output = "===stdout:\nfailed to read stdout\n"
+			} else {
+				output = "===stdout:\n" + string(buff) + "\n"
+			}
+		}
+
+		if executeRes.StderrSize != 0 {
+			if buff, err := io.ReadAll(executeRes.Stderr); err != nil {
+				output += "===stderr:\nfailed to read stderr\n"
+			} else {
+				output += "===stderr:\n" + string(buff) + "\n"
+			}
+		}
+	}
+	return &output
+}
+
+func (w *Worker) removeOutputFiles(sugar *zap.SugaredLogger, outputFileCaches []*os.File) {
+	for _, f := range outputFileCaches {
+		fi, err := f.Stat()
+		f.Close()
+		if err != nil {
+			sugar.With("err", err).Errorf("failed to remove file: %+v", f)
+			continue
+		}
+		if err := os.Remove(fi.Name()); err != nil {
+			sugar.With("err", err).Errorf("failed to remove file: %s", fi.Name())
+		}
+	}
 }
 
 func (w *Worker) Wait() {

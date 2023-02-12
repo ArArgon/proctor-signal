@@ -56,7 +56,7 @@ func main() {
 
 	resManager := resource.NewResourceManager(logger, backendCli, fs.(*resource.FileStore))
 	judgeManager := judge.NewJudgeManager(work, conf, fs.(*resource.FileStore), logger)
-	w := judgeworker.NewWorker(judgeManager, resManager, backendCli)
+	w := judgeworker.NewWorker(judgeManager, resManager, backendCli, conf)
 	w.Start(ctx, logger, judgeConf.Parallelism)
 
 	// Graceful shutdown...
