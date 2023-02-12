@@ -266,11 +266,6 @@ func (m *Manager) Judge(
 		return nil, err
 	}
 
-	defer func() {
-		_ = executeRes.Stdout.Close()
-		_ = executeRes.Stderr.Close()
-	}()
-
 	judgeRes := &JudgeRes{
 		ExecuteRes: *executeRes,
 		Conclusion: model.ConvertStatusToConclusion(executeRes.Status),
