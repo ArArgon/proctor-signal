@@ -213,7 +213,7 @@ func (w *Worker) compile(
 	}
 
 	result.ErrMessage = lo.ToPtr(compileRes.Error)
-	result.CompilerOutput = w.truncatedOutput(compileRes.ExecuteRes)
+	result.CompilerOutput = w.truncateOutput(compileRes.ExecuteRes)
 
 	if compileRes.Status != envexec.StatusAccepted {
 		// Compile error (not an internal error).
@@ -277,7 +277,7 @@ func (w *Worker) judgeOnDAG(
 			caseResult.ReturnValue = int32(judgeRes.ExitStatus)
 
 			judgeRes.StderrSize = 0 // ignore stderr
-			caseResult.TruncatedOutput = w.truncatedOutput(judgeRes.ExecuteRes)
+			caseResult.TruncatedOutput = w.truncateOutput(judgeRes.ExecuteRes)
 
 			subResult.TotalTime += caseResult.TotalTime
 			if subResult.TotalSpace < caseResult.TotalSpace {
@@ -309,63 +309,78 @@ func (w *Worker) judgeOnDAG(
 	return
 }
 
-func (w *Worker) truncatedOutput(executeRes judge.ExecuteRes) *string {
+func (w *Worker) truncateOutput(executeRes judge.ExecuteRes) *string {
 	var output string
 	if executeRes.StdoutSize+executeRes.StderrSize > int64(w.conf.JudgeOptions.MaxTruncatedOutput) {
 		if executeRes.StdoutSize > int64(w.conf.JudgeOptions.MaxTruncatedOutput)/2 &&
 			executeRes.StderrSize < int64(w.conf.JudgeOptions.MaxTruncatedOutput)/2 {
 			// read all executeRes.Stderr
-			buff := make([]byte, int64(w.conf.JudgeOptions.MaxTruncatedOutput)-executeRes.StderrSize)
-			if _, err := io.ReadFull(executeRes.Stdout, buff); err != nil {
-				output = "===stdout:\nfailed to read stdout\n"
-			} else {
-				output = "===stdout:\n" + string(buff) + "\n"
-			}
-
+			output = *truncateStdout(executeRes.Stdout, int64(w.conf.JudgeOptions.MaxTruncatedOutput)-executeRes.StderrSize)
 			if executeRes.StderrSize != 0 {
-				if buff, err := io.ReadAll(executeRes.Stderr); err != nil {
-					output += "===stderr:\nfailed to read stderr\n"
-				} else {
-					output += "===stderr:\n" + string(buff) + "\n"
-				}
+				output += *truncateStderr(executeRes.Stderr, -1)
 			}
 		} else if executeRes.StdoutSize < int64(w.conf.JudgeOptions.MaxTruncatedOutput)/2 &&
 			executeRes.StderrSize > int64(w.conf.JudgeOptions.MaxTruncatedOutput)/2 {
 			// read all executeRes.Stdout
 			if executeRes.StdoutSize != 0 {
-				if buff, err := io.ReadAll(executeRes.Stdout); err != nil {
-					output = "===stdout:\nfailed to read stdout\n"
-				} else {
-					output = "===stdout:\n" + string(buff) + "\n"
-				}
+				output = *truncateStdout(executeRes.Stdout, -1)
 			}
-
-			buff := make([]byte, int64(w.conf.JudgeOptions.MaxTruncatedOutput)-executeRes.StdoutSize)
-			if _, err := io.ReadFull(executeRes.Stdout, buff); err != nil {
-				output = "===stdout:\nfailed to read stdout\n"
-			} else {
-				output = "===stdout:\n" + string(buff) + "\n"
-			}
+			output += *truncateStderr(executeRes.Stderr, int64(w.conf.JudgeOptions.MaxTruncatedOutput)-executeRes.StdoutSize)
+		} else {
+			// read both half
+			output = *truncateStdout(executeRes.Stdout, int64(w.conf.JudgeOptions.MaxTruncatedOutput)) +
+				*truncateStderr(executeRes.Stderr, int64(w.conf.JudgeOptions.MaxTruncatedOutput))
 		}
 	} else {
 		// read all
 		if executeRes.StdoutSize != 0 {
-			if buff, err := io.ReadAll(executeRes.Stdout); err != nil {
-				output = "===stdout:\nfailed to read stdout\n"
-			} else {
-				output = "===stdout:\n" + string(buff) + "\n"
-			}
+			output = *truncateStdout(executeRes.Stdout, -1)
 		}
-
 		if executeRes.StderrSize != 0 {
-			if buff, err := io.ReadAll(executeRes.Stderr); err != nil {
-				output += "===stderr:\nfailed to read stderr\n"
-			} else {
-				output += "===stderr:\n" + string(buff) + "\n"
-			}
+			output += *truncateStderr(executeRes.Stderr, -1)
 		}
 	}
 	return &output
+}
+
+func truncateStdout(stdout *os.File, buffLen int64) *string {
+	var res string
+	if buffLen == -1 {
+		if buff, err := io.ReadAll(stdout); err != nil {
+			res = "===stdout:\nfailed to read stdout\n"
+		} else {
+			res = "===stdout:\n" + string(buff) + "\n"
+		}
+	} else {
+		buff := make([]byte, buffLen)
+		if _, err := io.ReadFull(stdout, buff); err != nil {
+			res = "===stdout:\nfailed to read stdout\n"
+		} else {
+			res = "===stdout:\n" + string(buff) + "\n"
+		}
+	}
+
+	return &res
+}
+
+func truncateStderr(stderr *os.File, buffLen int64) *string {
+	var res string
+	if buffLen == -1 {
+		if buff, err := io.ReadAll(stderr); err != nil {
+			res = "===stderr:\nfailed to read stderr\n"
+		} else {
+			res = "===stderr:\n" + string(buff) + "\n"
+		}
+	} else {
+		buff := make([]byte, buffLen)
+		if _, err := io.ReadFull(stderr, buff); err != nil {
+			res = "===stderr:\nfailed to read stderr\n"
+		} else {
+			res = "===stderr:\n" + string(buff) + "\n"
+		}
+	}
+
+	return &res
 }
 
 func (w *Worker) removeOutputFiles(sugar *zap.SugaredLogger, outputFileCaches []*os.File) {
