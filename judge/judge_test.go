@@ -168,7 +168,10 @@ func TestJudge(t *testing.T) {
 			)
 			assert.NoError(t, err)
 			assert.Equal(t, model.Conclusion_Accepted, judgeRes.Conclusion)
-			assert.Equal(t, "Hello,world.\n", judgeRes.TruncatedOutput)
+
+			buff, err := io.ReadAll(judgeRes.Stdout)
+			assert.NoError(t, err)
+			assert.Equal(t, "Hello,world.\n", string(buff))
 		})
 	}
 }

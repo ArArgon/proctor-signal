@@ -57,28 +57,22 @@ type ExecuteRes struct {
 	Status     envexec.Status
 	ExitStatus int
 	Error      string
-	Stdout     io.ReadSeekCloser
+	Stdout     *os.File
 	StdoutSize int64
-	Stderr     io.ReadSeekCloser
+	Stderr     *os.File
 	StderrSize int64
 	TotalTime  time.Duration
 	TotalSpace runner.Size
 }
 
 type CompileRes struct {
-	ExecuteRes
+	ExecuteRes      // ignore output size
 	ArtifactFileIDs map[string]string
 }
 
 type JudgeRes struct {
-	ExitStatus      int
-	Error           string
-	Conclusion      model.Conclusion
-	OutputID        string
-	OutputSize      int64
-	TruncatedOutput string
-	TotalTime       time.Duration
-	TotalSpace      runner.Size
+	ExecuteRes
+	Conclusion model.Conclusion
 }
 
 func (m *Manager) RemoveFiles(fileIDs map[string]string) {
@@ -296,12 +290,10 @@ func (m *Manager) Judge(
 	}()
 
 	judgeRes := &JudgeRes{
-		ExitStatus: executeRes.ExitStatus,
-		Error:      executeRes.Error,
-		TotalTime:  executeRes.TotalTime,
-		TotalSpace: executeRes.TotalSpace,
+		ExecuteRes: *executeRes,
 		Conclusion: model.ConvertStatusToConclusion(executeRes.Status),
 	}
+
 	if err != nil {
 		return judgeRes, err
 	}
@@ -328,25 +320,6 @@ func (m *Manager) Judge(
 	// reset executeRes.Stdout
 	if _, err = executeRes.Stdout.Seek(0, 0); err != nil {
 		return judgeRes, err
-	}
-
-	// read judge output
-	buffLen := lo.Clamp(executeRes.StdoutSize, 0, int64(m.conf.JudgeOptions.MaxTruncatedOutput))
-	buff := make([]byte, buffLen)
-	judgeRes.OutputSize = executeRes.StdoutSize
-
-	if _, err = io.ReadFull(executeRes.Stdout, buff); err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-		return judgeRes, err
-	}
-	judgeRes.TruncatedOutput = string(buff)
-
-	// Cache executeRes.Stdout as judge output
-	f, ok := executeRes.Stdout.(*os.File)
-	if ok {
-		judgeRes.OutputID, err = m.fs.Add("Stdout", f.Name())
-		if err != nil {
-			return judgeRes, err
-		}
 	}
 
 	return judgeRes, nil
