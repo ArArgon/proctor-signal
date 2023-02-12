@@ -38,7 +38,7 @@ func main() {
 		return err
 	}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 8))
 	if err != nil {
-		logger.Sugar().With("err", err).Fatalf("failed to connect to the backend after retries")
+		logger.Sugar().Fatalf("failed to connect to the backend after retries, %+v", err)
 	}
 	logger.Info("Successfully connected to the backend")
 
@@ -84,15 +84,15 @@ func main() {
 	ctx, cancel = context.WithTimeout(context.TODO(), time.Second*3)
 	defer cancel()
 
-	if err := backendCli.ReportExit(ctx, "exiting"); err != nil {
-		sugar.With("err", err).Warn("failed to exit gracefully")
+	if err = backendCli.ReportExit(ctx, "exiting"); err != nil {
+		sugar.Warnf("failed to exit gracefully, %+v", err)
 	}
 	sugar.Info("disconnected from the backend")
 	gojudge.CleanUpWorker(work)
 	err = fsCleanUp()
 
 	go func() {
-		logger.Sugar().Info("Shutdown Finished ", err)
+		logger.Sugar().Info("Shutdown Finished, ", err)
 		cancel()
 	}()
 	<-ctx.Done()
@@ -109,12 +109,13 @@ func initLogger(conf *config.Config) {
 		logger, err = zap.NewProduction()
 	} else {
 		zapConfig := zap.NewDevelopmentConfig()
+		zapConfig.DisableStacktrace = true
 		zapConfig.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 		zapConfig.Level.SetLevel(lo.Ternary(conf.Level == "debug", zap.DebugLevel, zap.InfoLevel))
 		logger, err = zapConfig.Build()
 	}
 	if err != nil {
-		log.Fatalln("failed to initialize logger: ", err)
+		log.Fatalf("failed to initialize logger: %+v\n", err)
 	}
 }
 
@@ -137,7 +138,7 @@ func newFileStore(conf *config.JudgeConfig) (filestore.FileStore, func() error) 
 		}
 	}
 	if err = os.MkdirAll(conf.Dir, 0755); err != nil {
-		sugar.With("err", err).Fatal("failed to prepare storeFS directory: ", conf.Dir)
+		sugar.Fatalf("failed to prepare storeFS directory %s, %s", conf.Dir, err)
 	}
 
 	fs, err = resource.NewFileStore(logger, conf.Dir)

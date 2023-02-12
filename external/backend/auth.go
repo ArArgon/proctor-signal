@@ -63,11 +63,13 @@ func newAuthManager(
 
 	if !conf.Backend.InsecureJwt {
 		if err := m.parsePublicKey(conf.Backend.JwtPubKey); err != nil {
+			logger.Sugar().Errorf("failed to parse public key, %+v", err)
 			return nil, errors.WithMessagef(err, "failed to parse public key")
 		}
 	}
 
 	if err := m.login(ctx); err != nil {
+		logger.Sugar().Errorf("failed to login to the auth server, %+v", err)
 		return nil, errors.WithMessagef(err, "failed to login to the auth server")
 	}
 
@@ -100,7 +102,7 @@ func (a *authManager) scheduleRefresh(ctx context.Context) {
 			)
 
 			if err != nil {
-				sugar.With("err", err).Errorf("failed to refresh token with 5 retries")
+				sugar.Errorf("failed to refresh token with 5 retries, %+v", err)
 			}
 
 			if a.noExpiration {
