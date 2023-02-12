@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"golang.org/x/sync/errgroup"
 
 	"proctor-signal/external/backend"
 	"proctor-signal/model"
@@ -87,20 +88,19 @@ func sha(str string) string {
 func fetchWorker(
 	ctx context.Context, ent *entry,
 	backendCli backend.Client, fs *FileStore,
-	wg *sync.WaitGroup, keyChan <-chan keyEntry, resChan chan<- string, errChan chan<- error,
+	keyChan <-chan keyEntry, resChan chan<- string,
 	sugar *zap.SugaredLogger,
-) {
+) error {
 	sugar.Debug("fetching worker started")
-	defer wg.Done()
 	for {
 		select {
 		case <-ctx.Done():
 			sugar.Info("context cancelled, exiting")
-			return
+			return nil
 		case key, ok := <-keyChan:
 			if !ok {
 				sugar.Debug("channel closed, exiting")
-				return
+				return nil
 			}
 			err := backoff.Retry(
 				func() error {
@@ -130,9 +130,7 @@ func fetchWorker(
 				),
 			)
 			if err != nil {
-				sugar.With("err", err).Errorf("failed to get resource")
-				errChan <- errors.WithMessagef(err, "failed to get resource, key %s", key.Key)
-				return
+				return errors.WithMessagef(err, "failed to fetch resource, key %s", key.Key)
 			}
 		}
 	}
@@ -167,20 +165,18 @@ func (m *Manager) fetchRes(ctx context.Context, p *model.Problem) error {
 	}
 	delete(keys, "")
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	//keys := lo.Filter(lo.Keys(resKeys), func(key string, _ int) bool { return key != "" })
-	wg := new(sync.WaitGroup)
+	group, ctx := errgroup.WithContext(ctx)
 	keyChan := make(chan keyEntry, len(keys))
 	resChan := make(chan string, concurrency)
-	errChan := make(chan error)
 	finRecv := make(chan struct{}, 1)
 	results := make([]string, 0, len(keys))
 
 	for i := 0; i < concurrency; i++ {
-		wg.Add(1)
-		go fetchWorker(ctx, fromProblem(p), m.backendCli, m.fs, wg, keyChan, resChan, errChan, sugar.Named("fetch-worker"))
+		i := i
+		group.Go(func() error {
+			return fetchWorker(ctx, fromProblem(p), m.backendCli, m.fs,
+				keyChan, resChan, sugar.Named(fmt.Sprintf("fetch-worker-%d", i)))
+		})
 	}
 
 	// Result receiver.
@@ -191,31 +187,18 @@ func (m *Manager) fetchRes(ctx context.Context, p *model.Problem) error {
 		finRecv <- struct{}{}
 	}()
 
-	var err error
-	// Err handler.
-	go func() {
-		for recvErr := range errChan {
-			err = multierr.Append(err, recvErr)
-			sugar.Errorf("received an error, killing all workers")
-			cancel()
-		}
-	}()
-
 	for _, key := range keys {
 		keyChan <- key
 	}
 	close(keyChan)
 
-	wg.Wait()
-	close(errChan)
+	err := group.Wait()
 	close(resChan)
-
 	<-finRecv
 
 	// Failed to fetch resource.
 	if err != nil {
-		sugar.With("err", err).Error("failed to fetch resource")
-		return errors.WithMessagef(err, "failed to fetch resource")
+		return err
 	}
 
 	// Check if all have fetched.
@@ -259,10 +242,10 @@ func (m *Manager) fetchProblem(ctx context.Context, id, version string) (*model.
 	return resp.Data, nil
 }
 
-// HoldAndLock prepares the given problem if it does not exist in the fileStore and locks that problem
-// by increasing its lock semaphore. If HoldAndLock() returns a nil error, user should call the unlock
+// PrepareThenLock prepares the given problem if it does not exist in the fileStore and then locks it by
+// increasing its lock semaphore. If PrepareThenLock() returns a nil error, user should call the unlock
 // function in the return values once the problem is no longer needed.
-func (m *Manager) HoldAndLock(ctx context.Context, id, version string) (*model.Problem, func(), error) {
+func (m *Manager) PrepareThenLock(ctx context.Context, id, version string) (*model.Problem, func(), error) {
 	m.mut.Lock()
 	defer m.mut.Unlock()
 
@@ -277,12 +260,10 @@ func (m *Manager) HoldAndLock(ctx context.Context, id, version string) (*model.P
 	if _, ok := m.problems[key]; !ok {
 		p, err = m.fetchProblem(ctx, id, version)
 		if err != nil {
-			sugar.With("err", err).Errorf("failed to fetch problem from remote")
 			return nil, nil, errors.WithMessagef(err, "failed to fetch problem from remote")
 		}
 
 		// Override default version & key. This is needed when the `version` is omitted.
-		version = p.Ver
 		key = fromProblem(p).Key()
 	}
 
@@ -291,13 +272,11 @@ func (m *Manager) HoldAndLock(ctx context.Context, id, version string) (*model.P
 		// Verify problem.
 		// TODO: add cache to deter invalid problem in order to prevent flooding.
 		if err = verifyProblem(p); err != nil {
-			sugar.With("err", err).Errorf("problem failed to pass verification")
 			return nil, nil, errors.WithMessagef(err, "problem failed to pass verification")
 		}
 
 		if err = m.fetchRes(ctx, p); err != nil {
-			sugar.With("err", err).Errorf("failed to prepare the resource")
-			return nil, nil, errors.WithMessagef(err, "failed to prepare resource for task %s @ %s", id, version)
+			return nil, nil, err
 		}
 		m.problems[key] = fromProblem(p)
 	}
@@ -333,7 +312,7 @@ func (m *Manager) evictAll() error {
 
 		// Evict the problem.
 		if err := m.fs.evictProblem(ent); err != nil {
-			sugar.With("problem", ent).Errorln("failed to evict problem: ", err)
+			sugar.With("problem", ent).Errorf("failed to evict problem: %+v", err)
 			multiErr = multierr.Append(multiErr, err)
 			continue
 		}
