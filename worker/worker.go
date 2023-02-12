@@ -369,15 +369,10 @@ func (w *Worker) truncatedOutput(executeRes judge.ExecuteRes) *string {
 
 func (w *Worker) removeOutputFiles(sugar *zap.SugaredLogger, outputFileCaches []*os.File) {
 	for _, f := range outputFileCaches {
-		fi, err := f.Stat()
+		if err := os.Remove(f.Name()); err != nil {
+			sugar.With("err", err).Errorf("failed to remove file: %s", f.Name())
+		}
 		f.Close()
-		if err != nil {
-			sugar.With("err", err).Errorf("failed to remove file: %+v", f)
-			continue
-		}
-		if err := os.Remove(fi.Name()); err != nil {
-			sugar.With("err", err).Errorf("failed to remove file: %s", fi.Name())
-		}
 	}
 }
 

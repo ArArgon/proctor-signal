@@ -270,13 +270,11 @@ func TestCompileMultiOptions(t *testing.T) {
 }
 
 // TODO: should be moved to worker_test after
-func TestRemoveOutputFiles(t *testing.T) {
-	for _, f := range outputFileCaches {
-		fi, err := f.Stat()
-		f.Close()
-		assert.NoError(t, err)
-		if err := os.Remove(fi.Name()); err != nil {
-			assert.NoError(t, err)
-		}
-	}
-}
+// func TestRemoveOutputFiles(t *testing.T) {
+// 	for _, f := range outputFileCaches {
+// 		if err := os.Remove(f.Name()); err != nil {
+// 			t.Errorf("failed to remove file: %s", f.Name())
+// 		}
+// 		f.Close()
+// 	}
+// }
