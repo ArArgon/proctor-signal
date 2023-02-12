@@ -79,7 +79,6 @@ func loadConf() *config.JudgeConfig {
 }
 
 var fileCaches map[string]map[string]string
-var outputFileCaches []*os.File
 
 func TestCompile(t *testing.T) {
 	ctx := context.Background()
@@ -93,7 +92,6 @@ func TestCompile(t *testing.T) {
 			sub := &model.Submission{Language: language, SourceCode: codes}
 			compileRes, err := judgeManger.Compile(ctx, sub)
 			assert.NotNil(t, compileRes)
-			outputFileCaches = append(outputFileCaches, compileRes.Stdout, compileRes.Stderr)
 			assert.NoError(t, err)
 
 			if compileRes.Status != envexec.StatusAccepted {
@@ -121,7 +119,6 @@ func TestExecute(t *testing.T) {
 				time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit),
 			)
 			assert.NotNil(t, executeRes)
-			outputFileCaches = append(outputFileCaches, executeRes.Stdout, executeRes.Stderr)
 
 			assert.NoError(t, err)
 
@@ -159,7 +156,6 @@ func TestJudge(t *testing.T) {
 				time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit),
 			)
 			assert.NotNil(t, judgeRes)
-			outputFileCaches = append(outputFileCaches, judgeRes.Stdout, judgeRes.Stderr)
 			assert.NoError(t, err)
 
 			assert.Equal(t, model.Conclusion_Accepted, judgeRes.Conclusion)
@@ -189,7 +185,6 @@ func TestCompileOption(t *testing.T) {
 
 				compileRes, err := judgeManger.Compile(ctx, sub)
 				assert.NotNil(t, compileRes, "")
-				outputFileCaches = append(outputFileCaches, compileRes.Stdout, compileRes.Stderr)
 				assert.NoError(t, err)
 
 				if compileRes.Status != envexec.StatusAccepted {
@@ -237,7 +232,6 @@ func TestCompileMultiOptions(t *testing.T) {
 	sub := &model.Submission{Language: language, SourceCode: codes, CompilerOption: `["cpp14", "o2"]`}
 	compileRes, err := judgeManger.Compile(ctx, sub)
 	assert.NotNil(t, compileRes)
-	outputFileCaches = append(outputFileCaches, compileRes.Stdout, compileRes.Stderr)
 	assert.NoError(t, err)
 
 	if compileRes.Status != envexec.StatusAccepted {
