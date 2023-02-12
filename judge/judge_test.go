@@ -79,6 +79,7 @@ func loadConf() *config.JudgeConfig {
 }
 
 var fileCaches map[string]map[string]string
+var outputFileCaches []*os.File
 
 func TestCompile(t *testing.T) {
 	ctx := context.Background()
@@ -92,15 +93,7 @@ func TestCompile(t *testing.T) {
 			sub := &model.Submission{Language: language, SourceCode: codes}
 			compileRes, err := judgeManger.Compile(ctx, sub)
 			assert.NotNil(t, compileRes)
-			defer func() {
-				if compileRes.Stdout != nil {
-					_ = compileRes.Stdout.Close()
-				}
-				if compileRes.Stderr != nil {
-					_ = compileRes.Stderr.Close()
-
-				}
-			}()
+			outputFileCaches = append(outputFileCaches, compileRes.Stdout, compileRes.Stderr)
 			assert.NoError(t, err)
 
 			if compileRes.Status != envexec.StatusAccepted {
@@ -127,12 +120,11 @@ func TestExecute(t *testing.T) {
 				&worker.MemoryFile{Content: []byte(stdin)}, fileCaches[language],
 				time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit),
 			)
-			defer func() {
-				_ = executeRes.Stdout.Close()
-				_ = executeRes.Stderr.Close()
-			}()
+			assert.NotNil(t, executeRes)
+			outputFileCaches = append(outputFileCaches, executeRes.Stdout, executeRes.Stderr)
 
 			assert.NoError(t, err)
+
 			if executeRes.ExitStatus != 0 {
 				t.Errorf("failed to execute: executeRes.ExitStatus != 0, executeRes: %+v", executeRes)
 			}
@@ -166,7 +158,10 @@ func TestJudge(t *testing.T) {
 				ctx, nil, language, fileCaches[language], testcase,
 				time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit),
 			)
+			assert.NotNil(t, judgeRes)
+			outputFileCaches = append(outputFileCaches, judgeRes.Stdout, judgeRes.Stderr)
 			assert.NoError(t, err)
+
 			assert.Equal(t, model.Conclusion_Accepted, judgeRes.Conclusion)
 
 			buff, err := io.ReadAll(judgeRes.Stdout)
@@ -194,15 +189,7 @@ func TestCompileOption(t *testing.T) {
 
 				compileRes, err := judgeManger.Compile(ctx, sub)
 				assert.NotNil(t, compileRes, "")
-				defer func() {
-					if compileRes.Stdout != nil {
-						_ = compileRes.Stdout.Close()
-					}
-					if compileRes.Stderr != nil {
-						_ = compileRes.Stderr.Close()
-
-					}
-				}()
+				outputFileCaches = append(outputFileCaches, compileRes.Stdout, compileRes.Stderr)
 				assert.NoError(t, err)
 
 				if compileRes.Status != envexec.StatusAccepted {
@@ -250,15 +237,7 @@ func TestCompileMultiOptions(t *testing.T) {
 	sub := &model.Submission{Language: language, SourceCode: codes, CompilerOption: `["cpp14", "o2"]`}
 	compileRes, err := judgeManger.Compile(ctx, sub)
 	assert.NotNil(t, compileRes)
-	defer func() {
-		if compileRes.Stdout != nil {
-			_ = compileRes.Stdout.Close()
-		}
-		if compileRes.Stderr != nil {
-			_ = compileRes.Stderr.Close()
-
-		}
-	}()
+	outputFileCaches = append(outputFileCaches, compileRes.Stdout, compileRes.Stderr)
 	assert.NoError(t, err)
 
 	if compileRes.Status != envexec.StatusAccepted {
@@ -288,6 +267,18 @@ func TestCompileMultiOptions(t *testing.T) {
 	}
 
 	assert.Equal(t, "8888889885\n", string(bytes), fmt.Sprintf("executeRes: %+v", executeRes))
+}
+
+// TODO: should be moved to worker_test after
+func TestRemoveOutputFiles(t *testing.T) {
+	for _, f := range outputFileCaches {
+		fi, err := f.Stat()
+		f.Close()
+		assert.NoError(t, err)
+		if err := os.Remove(fi.Name()); err != nil {
+			assert.NoError(t, err)
+		}
+	}
 }
 
 func TestNoCompilation(t *testing.T) {
