@@ -44,7 +44,7 @@ func main() {
 
 	defer func() { _ = logger.Sync() }()
 
-	sugar.Infof("conf: %+v", conf)
+	sugar.Debugf("conf: %+v", conf)
 
 	// Init judge
 	//judge.LoadLanguageConfig("language.yaml")
