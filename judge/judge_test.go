@@ -62,7 +62,7 @@ func TestMain(m *testing.M) {
 	// init judgeManger
 	judgeConf := lo.Must(config.LoadConf("../conf/signal.toml", "tests/language.toml"))
 	languageConfig = judgeConf.LanguageConf
-	judgeManger = NewJudgeManager(goJudgeWorker, judgeConf, fs, logger)
+	judgeManger = lo.Must(NewJudgeManager(goJudgeWorker, judgeConf, fs, logger))
 
 	os.Exit(m.Run())
 }
@@ -243,7 +243,7 @@ func TestCompileMultiOptions(t *testing.T) {
 	if compileRes.Status != envexec.StatusAccepted {
 		stdout, _ := io.ReadAll(compileRes.Stdout)
 		stderr, _ := io.ReadAll(compileRes.Stderr)
-		t.Errorf("failed to finish compile: compileRes.Status != 0, compile output: \n%s, compileRes: \n%+v",
+		t.Fatalf("failed to finish compile: compileRes.Status != 0, compile output: \n%s, compileRes: \n%+v",
 			"==stdout==\n"+string(stdout)+"==stderr==\n"+string(stderr), compileRes)
 	}
 

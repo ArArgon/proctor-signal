@@ -5,8 +5,10 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/criyle/go-judge/filestore"
 	"github.com/samber/lo"
 	"go.uber.org/zap"
@@ -29,7 +31,15 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	logger.Info("connecting to the backend...")
-	backendCli := lo.Must(backend.NewBackendClient(ctx, logger, conf))
+	var backendCli backend.Client
+	err := backoff.Retry(func() error {
+		var err error
+		backendCli, err = backend.NewBackendClient(ctx, logger, conf, cancel)
+		return err
+	}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 8))
+	if err != nil {
+		logger.Sugar().With("err", err).Fatalf("failed to connect to the backend after retries")
+	}
 	logger.Info("Successfully connected to the backend")
 
 	defer func() { _ = logger.Sync() }()
@@ -55,15 +65,19 @@ func main() {
 	gojudge.NewForceGCWorker(judgeConf)
 
 	resManager := resource.NewResourceManager(logger, backendCli, fs.(*resource.FileStore))
-	judgeManager := judge.NewJudgeManager(work, conf, fs.(*resource.FileStore), logger)
+	judgeManager := lo.Must(judge.NewJudgeManager(work, conf, fs.(*resource.FileStore), logger))
 	w := judgeworker.NewWorker(judgeManager, resManager, backendCli, conf)
+
 	w.Start(ctx, logger, judgeConf.Parallelism)
 
 	// Graceful shutdown...
 	sig := make(chan os.Signal, 3)
-	signal.Notify(sig, os.Interrupt)
-	<-sig
-	signal.Reset(os.Interrupt)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	select {
+	case <-sig:
+		signal.Reset(os.Interrupt)
+	case <-ctx.Done():
+	}
 
 	sugar.Info("Shutting Down...")
 	cancel()
@@ -74,8 +88,9 @@ func main() {
 	if err := backendCli.ReportExit(ctx, "exiting"); err != nil {
 		sugar.With("err", err).Warn("failed to exit gracefully")
 	}
+	sugar.Info("disconnected from the backend")
 	gojudge.CleanUpWorker(work)
-	err := fsCleanUp()
+	err = fsCleanUp()
 
 	go func() {
 		logger.Sugar().Info("Shutdown Finished ", err)

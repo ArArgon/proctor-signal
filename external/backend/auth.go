@@ -190,6 +190,18 @@ func (a *authManager) login(ctx context.Context) error {
 	return a.updateToken(newToken)
 }
 
+func (a *authManager) reportExit(ctx context.Context, reason string) error {
+	_, err := a.cli.GracefulExit(ctx, &GracefulExitRequest{
+		Reason:     reason,
+		Secret:     a.conf.Backend.AuthSecret,
+		InstanceId: a.instanceID,
+	})
+	if err != nil {
+		return errors.WithMessage(err, "failed to inform the backend server")
+	}
+	return nil
+}
+
 func (a *authManager) refresh(ctx context.Context) error {
 	resp, err := a.cli.RenewToken(ctx, &RenewTokenRequest{
 		Secret:     a.conf.Backend.AuthSecret,

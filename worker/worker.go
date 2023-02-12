@@ -205,8 +205,9 @@ func (w *Worker) compile(
 	if err != nil {
 		// Internal error.
 		sugar.With("err", err).Error("an internal error occurred during compilation")
-		w.judge.RemoveFiles(compileRes.ArtifactFileIDs)
-
+		if compileRes != nil {
+			w.judge.RemoveFiles(compileRes.ArtifactFileIDs)
+		}
 		internErr(result, "failed to compile,", err.Error())
 		return nil, true, err
 	}

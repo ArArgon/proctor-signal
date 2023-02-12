@@ -34,3 +34,14 @@ message RenewTokenResponse {
   optional string reason = 2;
   optional string token = 3;
 }
+
+message GracefulExitRequest {
+  string reason = 1;
+  string instance_id = 2;
+  string secret = 3;
+}
+
+message GracefulExitResponse {
+  int32 status_code = 1;
+  optional string reason = 2;
+}

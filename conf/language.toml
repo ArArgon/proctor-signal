@@ -1,24 +1,32 @@
 [languageConf.cpp]
 SourceName = 'source.cpp'
 ArtifactName = 'a.out'
-CompileCmd = "/usr/bin/g++ source.cpp -o a.out"
-CompileTimeLimit = 10000 # ms
-CompileSpaceLimit = 104857600
+Compiler = '/usr/bin/g++'
+CompileCmd = "$Compiler $Args ${SourceName} -o ${ArtifactName}"
+CompileTimeLimit = 20000 # ms
+CompileSpaceLimit = 134217728 # 128MB
 ExecuteCmd = "a.out"
-Options = {  o2 = "-O2", cpp14 = "--std=c++14" }
+Options = { o2 = "-O2", cpp14 = "--std=c++14" }
+ResourceFactor = 1
 
 [languageConf.c]
 SourceName = 'source.c'
 ArtifactName = 'a.out'
-CompileCmd = "/usr/bin/gcc source.c"
+Compiler = '/usr/bin/gcc'
+CompileCmd = "$Compiler $Args ${SourceName} -o ${ArtifactName}"
 CompileTimeLimit = 10000 # ms
-CompileSpaceLimit = 104857600
+CompileSpaceLimit = 134217728 # 128MB
 ExecuteCmd = "a.out"
+ResourceFactor = 1
 
 [languageConf.java]
-SourceName = 'Source.java'
-ArtifactName = 'Source.class'
-CompileCmd = "/usr/bin/java Source.java"
+SourceName = '$CLASS_NAME.java'
+ArtifactName = '$CLASS_NAME.class'
+Environment = [ "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64", "CLASS_NAME=Main" ]
+Compiler = '$JAVA_HOME/bin/javac'
+CompileCmd = "$Compiler -encoding utf-8 $Args $SourceName"
 CompileTimeLimit = 20000 # ms
-CompileSpaceLimit = 104857600
-ExecuteCmd = "/usr/bin/java -jar Source.class"
+CompileSpaceLimit = 536870912 # 512MB
+ExecuteCmd = "$JAVA_HOME/bin/java $CLASS_NAME"
+Options = { "java11" = "--source 11", "java8" = "--source 8" }
+ResourceFactor = 2
