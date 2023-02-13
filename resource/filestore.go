@@ -39,13 +39,13 @@ func NewFileStore(logger *zap.Logger, loc string) (*FileStore, error) {
 
 	sugar.Info("mkdir tmp")
 	if err = os.MkdirAll(path.Join(loc, "tmp"), 0755); err != nil {
-		sugar.With("err", err).Error("failed to create directory tmp")
+		sugar.Errorf("failed to create directory tmp, %+v", err)
 		return nil, err
 	}
 
 	sugar.Info("mkdir persistent")
 	if err = os.MkdirAll(path.Join(loc, "persistent"), 0755); err != nil {
-		sugar.With("err", err).Error("failed to create directory persistent")
+		sugar.Errorf("failed to create directory persistent, %+v", err)
 		return nil, err
 	}
 
@@ -70,12 +70,12 @@ func (m *FileStore) saveResource(ent *entry, r *sourceReader) error {
 
 	if _, err := os.Lstat(loc); err != nil {
 		if !os.IsNotExist(err) {
-			sugar.With("err", err).Error("unable to read problem data folder")
+			sugar.Errorf("unable to read problem data folder, %+v", err)
 			return errors.WithMessagef(err, "unable to read problem data folder, loc: %s", loc)
 		}
 
 		if err = os.Mkdir(loc, 0750); err != nil && !os.IsExist(err) {
-			sugar.With("err", err).Errorf("failed to mkdir for the problem")
+			sugar.Errorf("failed to mkdir for the problem, %+v", err)
 			return errors.WithMessagef(err, "failed to mkdir for the problem id:%s, ver:%s", ent.id, ent.version)
 		}
 	}
@@ -88,13 +88,13 @@ func (m *FileStore) saveResource(ent *entry, r *sourceReader) error {
 	}
 
 	if err != nil {
-		sugar.With("err", err).Errorf("failed to open a new file for %s", r.key)
+		sugar.Errorf("failed to open a new file for %s: %+v", r.key, err)
 		return errors.WithMessagef(err, "failed to open a new file for %s", r.key)
 	}
 
 	defer func() {
 		if err != nil {
-			sugar.Warnf("failed to save file, rolling back")
+			sugar.Warn("failed to save file, rolling back")
 			err = multierr.Append(err, os.Remove(resPath))
 		}
 	}()
@@ -104,16 +104,17 @@ func (m *FileStore) saveResource(ent *entry, r *sourceReader) error {
 	err = multierr.Append(err, f.Close())
 
 	if err != nil {
-		sugar.With("err", err).Errorf("failed to save file %s", resPath)
+		sugar.Errorf("failed to save file %s: %+v", resPath, err)
 		return errors.WithMessagef(err, "failed to save file %s", resPath)
 	}
 
 	if r.size >= 0 && written != r.size {
-		sugar.Errorf("unexpected file size, written: %d, expecting: %d", written, r.size)
-		return errors.Errorf("unexpected file size, written: %d, expecting: %d", written, r.size)
+		err = errors.Errorf("unexpected file size, written: %d, expecting: %d", written, r.size)
+		sugar.Error("file corrupted: ", err)
+		return err
 	}
 
-	sugar.Debug("successfully saved resource %s", r.key)
+	sugar.Debugf("successfully saved resource %s", r.key)
 	return nil
 }
 
@@ -138,7 +139,7 @@ func (m *FileStore) evictProblem(p *entry) error {
 
 	files, err := os.ReadDir(loc)
 	if err != nil {
-		sugar.With("err", err).Errorf("failed to evict problem")
+		sugar.Error("failed to evict problem, %+v", err)
 		return errors.WithMessagef(err, "failed to evict problem %s, ver: %s", p.id, p.version)
 	}
 
@@ -154,7 +155,7 @@ func (m *FileStore) evictProblem(p *entry) error {
 
 	// Remove directory.
 	if err = os.RemoveAll(loc); err != nil {
-		sugar.With("err", err).Errorf("failed to remove directory %s", loc)
+		sugar.Errorf("failed to remove directory %s, %+v", loc, err)
 		return errors.WithMessagef(err, "failed to remove directory %s", loc)
 	}
 
@@ -225,7 +226,7 @@ func (m *FileStore) BulkRemove(ids []string) (int, error) {
 			continue
 		}
 		if err := os.Remove(loc); err != nil && !errors.Is(err, os.ErrNotExist) {
-			m.logger.Sugar().With("err", err).Errorf("failed to remove file [id: %s] [loc: %s]", id, loc)
+			m.logger.Sugar().Errorf("failed to remove file [id: %s] [loc: %s], %+v", id, loc, err)
 			totalErr = multierr.Append(totalErr, err)
 		}
 		count++
@@ -260,7 +261,7 @@ func (m *FileStore) Remove(id string) bool {
 	}
 
 	if err := os.Remove(loc); err != nil && !errors.Is(err, os.ErrNotExist) {
-		m.logger.Sugar().With("err", err).Errorf("failed to remove file [id: %s] [loc: %s]", id, loc)
+		m.logger.Sugar().Errorf("failed to remove file [id: %s] [loc: %s], %+v", id, loc, err)
 		return false
 	}
 
@@ -362,7 +363,7 @@ func (m *FileStore) New() (*os.File, error) {
 		return nil, false
 	})
 	if err != nil {
-		sugar.Errorln("failed to new a file in fileStore: ", err)
+		sugar.Errorf("failed to new a file in fileStore: %+v", err)
 		return nil, err
 	}
 	return res, nil

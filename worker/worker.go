@@ -63,7 +63,7 @@ func (w *Worker) spin(ctx context.Context, logger *zap.Logger, id int) {
 	for {
 		select {
 		case <-ctx.Done():
-			sugar.Info("context cancelled, exiting")
+			sugar.Debug("context cancelled, exiting")
 			return
 		case <-tick.C:
 			ctx, cancel := context.WithDeadline(ctx, time.Now().Add(maxTimeout))
@@ -79,7 +79,7 @@ func (w *Worker) spin(ctx context.Context, logger *zap.Logger, id int) {
 			}
 
 			if err != nil {
-				sugar.With("err", err).Error("an internal error occurred")
+				sugar.Errorf("an internal error occurred: %+v", err)
 			}
 			cancel()
 		}
@@ -115,12 +115,11 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 	}()
 
 	// Lock the problem (and defer unlock).
-	p, unlock, err := w.resManager.HoldAndLock(ctx, sub.ProblemId, sub.ProblemVer)
+	p, unlock, err := w.resManager.PrepareThenLock(ctx, sub.ProblemId, sub.ProblemVer)
 	if err != nil {
-		sugar.With("err", err).Error("failed to hold and lock problem")
-		internErr(result, "failed to hold and lock problem,", err.Error())
+		internErr(result, "failed to prepare the problem:", err.Error())
 		return &backend.CompleteJudgeTaskRequest{Result: result},
-			errors.WithMessagef(err, "failed to hold and lock problem")
+			errors.WithMessagef(err, "failed to prepare and lock problem")
 	}
 	defer unlock()
 
@@ -139,7 +138,7 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 	subtasks, err := w.judgeOnDAG(ctx, sugar, sub, p, artifactIDs, outputFileCaches)
 	if err != nil {
 		// internal err.
-		internErr(result, "an internal error occured during judgement: ", err.Error())
+		internErr(result, "an internal error occurred during judgement:", err.Error())
 		return &backend.CompleteJudgeTaskRequest{Result: result}, err
 	}
 
@@ -160,7 +159,7 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 
 func internErr(result *model.JudgeResult, messages ...string) {
 	result.Conclusion = model.Conclusion_InternalError
-	result.ErrMessage = lo.ToPtr(strings.Join(messages, ""))
+	result.ErrMessage = lo.ToPtr(strings.Join(messages, " "))
 	result.CompleteTime = timestamppb.Now()
 }
 
@@ -168,8 +167,8 @@ func (w *Worker) fetch(ctx context.Context, sugar *zap.SugaredLogger,
 ) (sub *model.Submission, abort bool, err error) {
 	task, err := w.backend.FetchJudgeTask(ctx, &backend.FetchJudgeTaskRequest{})
 	if err != nil {
-		sugar.With("err", err).Errorf("failed to fetch task from remote")
-		return nil, true, err
+		sugar.Errorf("failed to fetch task from remote, %+v", err)
+		return nil, true, errors.Wrapf(err, "failed to fetch task from remote")
 	}
 
 	// No Content.
@@ -180,13 +179,13 @@ func (w *Worker) fetch(ctx context.Context, sugar *zap.SugaredLogger,
 
 	if task.StatusCode < 200 || task.StatusCode >= 300 {
 		err = errors.Errorf("backend error: %s", task.GetReason())
-		sugar.With("err", err).Error("failed to fetch task from remote, server-side err")
+		sugar.Errorf("failed to fetch task from remote, server-side err: %+v", err)
 		return nil, true, err
 	}
 
 	if sub = task.Task; sub == nil {
 		err = errors.New("empty task")
-		sugar.With("err", err).Error("invalid task")
+		sugar.Errorf("invalid task: %+v", err)
 		return nil, true, err
 	}
 	return
@@ -205,7 +204,7 @@ func (w *Worker) compile(
 
 	if err != nil {
 		// Internal error.
-		sugar.With("err", err).Error("an internal error occurred during compilation")
+		sugar.Error("an internal error occurred during compilation: %+v", err)
 		if compileRes != nil {
 			w.judge.RemoveFiles(compileRes.ArtifactFileIDs)
 		}
@@ -235,7 +234,7 @@ func (w *Worker) compile(
 
 	if compileRes.Status != envexec.StatusAccepted {
 		// Compile error (not an internal error).
-		sugar.With("err", compileRes.Status.String()).Debug("failed to compile")
+		sugar.With("exit_status", compileRes.Status.String()).Debug("failed to compile, stderr: %s", compilerStderr)
 		result.Conclusion = model.Conclusion_CompilationError
 		return nil, true, nil
 	}
@@ -283,7 +282,7 @@ func (w *Worker) judgeOnDAG(
 			}
 
 			if err != nil {
-				sugar.With("err", err).Error("failed to judge")
+				sugar.Errorf("failed to judge due to an internal error: %+v", err)
 				caseResult.Conclusion = model.Conclusion_InternalError
 				return false
 			}

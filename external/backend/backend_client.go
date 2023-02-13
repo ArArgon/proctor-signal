@@ -62,14 +62,13 @@ func NewBackendClient(
 	// Auth conn & client.
 	authConn, err := grpc.Dial(rpcAddr, cred)
 	if err != nil {
-		sugar.With("err", err).Error("failed to establish auth grpc connection")
-		return nil, errors.WithMessage(err, "failed to establish auth grpc connection")
+		sugar.Errorf("failed to establish auth grpc connection, %+v", err)
+		return nil, errors.Wrapf(err, "failed to establish auth grpc connection")
 	}
 
 	auth, err := newAuthManager(ctx, logger, authConn, conf)
 	if err != nil {
-		sugar.With("err", err).Error("failed to initialize auth client")
-		return nil, errors.WithMessage(err, "failed to initialize auth client")
+		return nil, err
 	}
 	sugar.Info("authentication success")
 
@@ -80,8 +79,8 @@ func NewBackendClient(
 		grpc.WithStreamInterceptor(auth.streamInterceptor()),
 	)
 	if err != nil {
-		sugar.With("err", err).Error("failed to establish backend grpc connection")
-		return nil, errors.WithMessage(err, "failed to establish backend grpc connection")
+		sugar.Errorf("failed to establish backend grpc connection, %+v", err)
+		return nil, errors.Wrapf(err, "failed to establish backend grpc connection")
 	}
 	sugar.Info("successfully connect to the grpc backend")
 
@@ -93,7 +92,7 @@ func NewBackendClient(
 		conf.Backend.HttpPrefix,
 	)
 	if err != nil {
-		sugar.With("err", err).Error("failed to compose api url")
+		sugar.Errorf("failed to compose api url, %+v", err)
 		return nil, errors.WithMessage(err, "failed to compose api url")
 	}
 
@@ -221,7 +220,7 @@ func (c *client) ping(ctx context.Context, sugar *zap.SugaredLogger, cancel cont
 			)
 			if err != nil {
 				// Halt.
-				sugar.With("err", err).Errorf("failed to ping, disconnecting from the backend")
+				sugar.Errorf("failed to ping, disconnecting from the backend, %+v", err)
 				cancel()
 			}
 		case <-ctx.Done():

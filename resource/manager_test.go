@@ -142,7 +142,7 @@ func TestManager(t *testing.T) {
 	// Tests.
 	for _, p := range problems {
 		t.Run("case-"+p.Id, func(t *testing.T) {
-			rp, unlock, err := m.HoldAndLock(ctx, p.Id, p.Ver)
+			rp, unlock, err := m.PrepareThenLock(ctx, p.Id, p.Ver)
 			assert.NoError(t, err)
 			assert.EqualValues(t, p, rp)
 			org := m.problems[fromProblem(p).Key()].locks
@@ -164,7 +164,7 @@ func TestManager(t *testing.T) {
 	// Test problem 2
 	for _, p := range problems {
 		t.Run("case2-"+p.Id, func(t *testing.T) {
-			rp, unlock, err := m.HoldAndLock(ctx, p.Id, p.Ver)
+			rp, unlock, err := m.PrepareThenLock(ctx, p.Id, p.Ver)
 			assert.NoError(t, err)
 			assert.EqualValues(t, p, rp)
 			org := m.problems[fromProblem(p).Key()].locks
