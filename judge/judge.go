@@ -81,7 +81,7 @@ func (m *Manager) RemoveFiles(fileIDs map[string]string) {
 	}
 	_, err := m.fs.BulkRemove(lo.Values(fileIDs))
 	if err != nil {
-		m.logger.Sugar().With("err", err).Error("failed to remove files: %+v", fileIDs)
+		m.logger.Sugar().With("file_ids", fileIDs).Errorf("failed to remove files, %+v", err)
 	}
 }
 
