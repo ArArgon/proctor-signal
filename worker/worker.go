@@ -129,14 +129,14 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 	// TODO: upload output files to OSS before it was deleted
 
 	// Compile source code.
-	artifactIDs, showJudgeOutput, abort, err := w.compile(ctx, sugar, sub, result, outputFileCaches)
+	artifactIDs, abort, err := w.compile(ctx, sugar, sub, result, outputFileCaches)
 	if abort {
 		return &backend.CompleteJudgeTaskRequest{Result: result}, err
 	}
 	defer w.judge.RemoveFiles(artifactIDs)
 
 	// Judge on the DAG.
-	subtasks, err := w.judgeOnDAG(ctx, sugar, sub, p, showJudgeOutput, artifactIDs, outputFileCaches)
+	subtasks, err := w.judgeOnDAG(ctx, sugar, sub, p, artifactIDs, outputFileCaches)
 	if err != nil {
 		// internal err.
 		internErr(result, "an internal error occured during judgement: ", err.Error())
@@ -196,7 +196,7 @@ func (w *Worker) compile(
 	ctx context.Context, sugar *zap.SugaredLogger,
 	sub *model.Submission, result *model.JudgeResult,
 	outputFileCaches []*os.File,
-) (artifactIDs map[string]string, showJudgeOutput bool, abort bool, err error) {
+) (artifactIDs map[string]string, abort bool, err error) {
 	compileRes, err := w.judge.Compile(ctx, sub)
 	if compileRes != nil {
 		outputFileCaches = append(outputFileCaches, compileRes.Stdout, compileRes.Stderr)
@@ -210,29 +210,41 @@ func (w *Worker) compile(
 			w.judge.RemoveFiles(compileRes.ArtifactFileIDs)
 		}
 		internErr(result, "failed to compile,", err.Error())
-		return nil, false, true, err
+		return nil, true, err
 	}
 
 	result.ErrMessage = lo.ToPtr(compileRes.Error)
-	result.CompilerOutput = w.truncateOutput(compileRes.ExecuteRes)
+
 	if compileRes.StdoutSize != 0 && compileRes.StderrSize != 0 {
-		showJudgeOutput = true
-	} else {
-		showJudgeOutput = false
+		result.CompilerOutput = w.truncateOutput(compileRes.ExecuteRes)
+	} else if compileRes.StdoutSize != 0 {
+		buff := make([]byte, lo.Clamp(compileRes.StdoutSize, 0, int64(w.conf.JudgeOptions.MaxTruncatedOutput)))
+		if _, err := io.ReadFull(compileRes.Stdout, buff); err == nil {
+			result.CompilerOutput = lo.ToPtr(string(buff))
+		} else {
+			result.CompilerOutput = lo.ToPtr("failed to read stdout")
+		}
+	} else if compileRes.StderrSize != 0 {
+		buff := make([]byte, lo.Clamp(compileRes.StderrSize, 0, int64(w.conf.JudgeOptions.MaxTruncatedOutput)))
+		if _, err := io.ReadFull(compileRes.Stderr, buff); err == nil {
+			result.CompilerOutput = lo.ToPtr(string(buff))
+		} else {
+			result.CompilerOutput = lo.ToPtr("failed to read stderr")
+		}
 	}
 
 	if compileRes.Status != envexec.StatusAccepted {
 		// Compile error (not an internal error).
 		sugar.With("err", compileRes.Status.String()).Debug("failed to compile")
 		result.Conclusion = model.Conclusion_CompilationError
-		return nil, showJudgeOutput, true, nil
+		return nil, true, nil
 	}
-	return compileRes.ArtifactFileIDs, showJudgeOutput, false, nil
+	return compileRes.ArtifactFileIDs, false, nil
 }
 
 func (w *Worker) judgeOnDAG(
 	ctx context.Context, sugar *zap.SugaredLogger,
-	sub *model.Submission, p *model.Problem, showJudgeOutput bool,
+	sub *model.Submission, p *model.Problem,
 	artifactIDs map[string]string, outputFileCaches []*os.File,
 ) (subResults []*model.SubtaskResult, err error) {
 	// Compose the DAG.
@@ -282,9 +294,14 @@ func (w *Worker) judgeOnDAG(
 			caseResult.TotalSpace = float32(judgeRes.TotalSpace.KiB()) / 1024
 			caseResult.ReturnValue = int32(judgeRes.ExitStatus)
 
-			if showJudgeOutput {
-				judgeRes.StderrSize = 0 // ignore stderr
-				caseResult.TruncatedOutput = w.truncateOutput(judgeRes.ExecuteRes)
+			// TODO: read from judge file
+			if judgeRes.StdoutSize != 0 {
+				buff := make([]byte, lo.Clamp(judgeRes.StdoutSize, 0, int64(w.conf.JudgeOptions.MaxTruncatedOutput)))
+				if _, err := io.ReadFull(judgeRes.Stdout, buff); err == nil {
+					caseResult.TruncatedOutput = lo.ToPtr(string(buff))
+				} else {
+					caseResult.TruncatedOutput = lo.ToPtr("failed to read stdout")
+				}
 			}
 
 			subResult.TotalTime += caseResult.TotalTime
