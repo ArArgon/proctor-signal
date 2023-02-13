@@ -46,7 +46,8 @@ jobs:
       - run: go install gotest.tools/gotestsum@latest
       - run: cat worker/worker.go
       - run: git fetch origin perf/optimize_output_handle
-      - run: git diff perf/optimize_output_handle..$(git --no-pager log -1 --format='%H')
+      - run: git rev-parse HEAD
+      - run: git diff origin/perf/optimize_output_handle HEAD
       - run: gotestsum -- -exec sudo -race -cover ./...
   build-image:
     runs-on: ubuntu-latest
