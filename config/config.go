@@ -1,7 +1,9 @@
 package config
 
 import (
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 
 	judgeconfig "github.com/criyle/go-judge/cmd/executorserver/config"
@@ -54,11 +56,15 @@ type Config struct {
 }
 
 func LoadConf(confPaths ...string) (*Config, error) {
+	configs, err := collectConfigs(confPaths)
+	if err != nil {
+		return nil, err
+	}
 	conf := new(Config)
-	if err := configor.New(&configor.Config{
+	if err = configor.New(&configor.Config{
 		Debug:                strings.ToLower(os.Getenv("ENV")) == "debug",
 		ErrorOnUnmatchedKeys: true,
-	}).Load(conf, confPaths...); err != nil {
+	}).Load(conf, configs...); err != nil {
 		return nil, err
 	}
 
@@ -77,4 +83,35 @@ func LoadConf(confPaths ...string) (*Config, error) {
 	}
 
 	return conf, nil
+}
+
+func collectConfigs(confPaths []string) ([]string, error) {
+	var configs []string
+	for _, conf := range confPaths {
+		f, err := os.Open(conf)
+		if err != nil {
+			return nil, errors.Wrapf(err, "cannot open file: %s", conf)
+		}
+		stat, err := f.Stat()
+		if err != nil {
+			return nil, errors.Wrapf(err, "cannot read file: %s", conf)
+		}
+
+		if !stat.IsDir() {
+			configs = append(configs, conf)
+			continue
+		}
+
+		entries, err := fs.ReadDir(os.DirFS(conf), ".")
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to list configs under %s", conf)
+		}
+		for _, ent := range entries {
+			if ent.IsDir() {
+				continue
+			}
+			configs = append(configs, filepath.Join(conf, ent.Name()))
+		}
+	}
+	return configs, nil
 }

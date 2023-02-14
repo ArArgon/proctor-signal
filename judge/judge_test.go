@@ -42,7 +42,7 @@ func TestMain(m *testing.M) {
 	logger := lo.Must(zapConfig.Build())
 
 	conf := loadConf()
-	gojudge.Init(logger, conf)
+	gojudge.Init(logger)
 
 	// Prepare tmp dir.
 	loc, err := os.MkdirTemp(os.TempDir(), "signal")
