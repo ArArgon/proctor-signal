@@ -264,6 +264,7 @@ func (w *Worker) judgeOnDAG(
 
 			caseResult.Conclusion = judgeRes.Conclusion
 			caseResult.DiffPolicy = p.DiffPolicy
+			caseResult.FinishedAt = timestamppb.Now()
 			caseResult.TotalTime = uint32(judgeRes.TotalTime.Milliseconds())
 			caseResult.TotalSpace = float32(judgeRes.TotalSpace.KiB()) / 1024
 			caseResult.ReturnValue = int32(judgeRes.ExitStatus)

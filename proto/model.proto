@@ -224,4 +224,7 @@ message CaseResult {
 
   // The truncated output (first 1 KiB).
   optional string truncated_output = 12;
+
+  // Finished at.
+  google.protobuf.Timestamp finished_at = 13;
 }
