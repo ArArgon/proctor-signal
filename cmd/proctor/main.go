@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -109,10 +110,10 @@ func initLogger(conf *config.Config) (logger *zap.Logger) {
 	}
 
 	zapConfig := zap.NewDevelopmentConfig()
-	switch conf.Level {
-	case "production":
+	switch strings.ToLower(conf.Level) {
+	case "production", "prod":
 		zapConfig = zap.NewProductionConfig()
-	case "dev":
+	case "development", "dev":
 		zapConfig.Level.SetLevel(zap.InfoLevel)
 		fallthrough
 	case "debug":
