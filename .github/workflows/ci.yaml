@@ -52,16 +52,19 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
       - name: Log in to GitHub Packages
-        # This is where you will update the personal access token to GITHUB_TOKEN
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
-      - name: Down-case owner
+      - name: Prepare Envs
         run: |
           echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >>${GITHUB_ENV}
+          echo "TRUNCATED_REV=$(echo ${{ github.sha }} | awk '{print substr($0, 1, 8) }')" >>${GITHUB_ENV}
+          echo "IMAGE=ghcr.io/${{ env.OWNER }}/${{ env.IMAGE_NAME }}" >>${GITHUB_ENV}
       - name: Build (and push) Docker image
         uses: docker/build-push-action@v4
         with:
           push: ${{ github.ref == 'refs/heads/main' }}
-          tags: ghcr.io/${{ env.OWNER }}/${{ env.IMAGE_NAME }}:latest
+          tags: ${{ env.IMAGE }}:latest,${{ env.IMAGE }}:${{ env.TRUNCATED_REV }}
           labels: |
             "org.opencontainers.image.source=https://github.com/${{ github.repository }}"
             "org.opencontainers.image.description=Signal judge executor image"
+            "org.opencontainers.image.revision=${{ github.sha }}"
+            "org.opencontainers.image.ref.name=${{ github.ref }}"

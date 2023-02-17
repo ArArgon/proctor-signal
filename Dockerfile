@@ -1,4 +1,6 @@
 FROM golang:1.19 AS compile
+RUN --mount=type=cache,target=/root/.cache/go-build \
+  go build ...
 
 WORKDIR /build
 
@@ -20,12 +22,17 @@ RUN go mod tidy
 RUN go build proctor-signal/cmd/proctor
 
 FROM ubuntu:20.04
+RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+  --mount=type=cache,target=/var/lib/apt,sharing=locked \
+  apt update && apt-get --no-install-recommends install -y gcc
 
 WORKDIR /app
 
 SHELL ["/bin/bash", "-c"]
 
-RUN apt update && \
+RUN add-apt-repository ppa:deadsnakes/ppa && \
+    apt update && \
     apt-get install -y ca-certificates
 
 RUN if [[ $BUILD_LOCATION = "cn" ]] ; then \
@@ -35,7 +42,7 @@ RUN if [[ $BUILD_LOCATION = "cn" ]] ; then \
     fi
 
 RUN apt update && \
-    apt-get --no-install-recommends install -y gcc g++ python3 openjdk-11-jdk openjdk-17-jdk openjdk-8-jdk
+    apt-get --no-install-recommends install -y gcc g++ python3.8 python3.9 openjdk-17-jdk
 
 COPY --from=compile /build/proctor ./
 COPY --from=compile /build/conf ./conf
