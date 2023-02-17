@@ -1,4 +1,6 @@
 FROM golang:1.19 AS compile
+RUN --mount=type=cache,target=/root/.cache/go-build \
+  go build ...
 
 WORKDIR /build
 
@@ -25,8 +27,7 @@ WORKDIR /app
 
 SHELL ["/bin/bash", "-c"]
 
-RUN apt update && \
-    apt-get install -y ca-certificates
+RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
 
 RUN if [[ $BUILD_LOCATION = "cn" ]] ; then \
       echo replacing original apt repository to tuna; \
@@ -34,8 +35,13 @@ RUN if [[ $BUILD_LOCATION = "cn" ]] ; then \
       sed -i "s@http://.*security.ubuntu.com@https://mirrors.tuna.tsinghua.edu.cn@g" /etc/apt/sources.list;\
     fi
 
-RUN apt update && \
-    apt-get --no-install-recommends install -y gcc g++ python3 openjdk-11-jdk openjdk-17-jdk openjdk-8-jdk
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt update && \
+    apt-get install -y ca-certificates software-properties-common && \
+    add-apt-repository ppa:deadsnakes/ppa && \
+    apt update && \
+    apt-get --no-install-recommends install -y gcc g++ python3.8 python3.9 openjdk-17-jdk
 
 COPY --from=compile /build/proctor ./
 COPY --from=compile /build/conf ./conf
