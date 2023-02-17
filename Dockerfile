@@ -31,9 +31,10 @@ WORKDIR /app
 
 SHELL ["/bin/bash", "-c"]
 
-RUN add-apt-repository ppa:deadsnakes/ppa && \
+RUN apt update && \
+    apt-get install -y ca-certificates && \
+    add-apt-repository ppa:deadsnakes/ppa && \
     apt update && \
-    apt-get install -y ca-certificates
 
 RUN if [[ $BUILD_LOCATION = "cn" ]] ; then \
       echo replacing original apt repository to tuna; \
