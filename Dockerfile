@@ -38,7 +38,7 @@ RUN if [[ $BUILD_LOCATION = "cn" ]] ; then \
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt update && \
-    apt-get install -y ca-certificates && \
+    apt-get install -y ca-certificates software-properties-common && \
     add-apt-repository ppa:deadsnakes/ppa && \
     apt update && \
     apt-get --no-install-recommends install -y gcc g++ python3.8 python3.9 openjdk-17-jdk
