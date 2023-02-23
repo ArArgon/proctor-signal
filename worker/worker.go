@@ -86,10 +86,12 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 	// Fetch judge task.
 	sub, abort, err := w.fetch(ctx, sugar)
 	if abort {
-		if err != nil {
+		if err != nil && sub != nil {
 			return &backend.CompleteJudgeTaskRequest{Result: &model.JudgeResult{
-				Conclusion: model.Conclusion_InternalError,
-				ErrMessage: lo.ToPtr("failed to fetch: " + err.Error()),
+				SubmissionId: sub.Id,
+				ProblemId:    sub.ProblemId,
+				Conclusion:   model.Conclusion_InternalError,
+				ErrMessage:   lo.ToPtr("failed to fetch: " + err.Error()),
 			}}, err
 		}
 		return nil, err
@@ -97,6 +99,7 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 
 	result := &model.JudgeResult{
 		SubmissionId: sub.Id,
+		ProblemId:    sub.ProblemId,
 		ReceiveTime:  timestamppb.Now(),
 	}
 	sugar = sugar.With(
