@@ -234,7 +234,8 @@ func (w *Worker) compile(
 
 	if compileRes.Status != envexec.StatusAccepted {
 		// Compile error (not an internal error).
-		sugar.With("exit_status", compileRes.Status.String()).Debug("failed to compile, stderr: %s", compilerStderr)
+		sugar.With("exit_status", compileRes.Status.String()).
+			Debug("failed to compile, stderr: %s", result.CompilerOutput)
 		result.Conclusion = model.Conclusion_CompilationError
 		return nil, true, nil
 	}
@@ -412,7 +413,7 @@ func (w *Worker) removeOutputFiles(sugar *zap.SugaredLogger, outputFileCaches []
 		if err := os.Remove(f.Name()); err != nil {
 			sugar.With("err", err).Errorf("failed to remove file: %s", f.Name())
 		}
-		f.Close()
+		_ = f.Close()
 	}
 }
 
