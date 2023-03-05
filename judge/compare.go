@@ -31,8 +31,12 @@ func compareBytes(expected, actual io.Reader, buffLen int) (bool, error) {
 
 		if expectedLen < buffLen {
 			// finish reading expected, ignore SPACE or ENTER at the end of buff
-			expectedOutputBuff = filter(expectedOutputBuff[:expectedLen])
-			actualOutputBuff = filter(actualOutputBuff[:actualLen])
+			if expectedLen != 0 {
+				expectedOutputBuff = filter(expectedOutputBuff[:expectedLen])
+			}
+			if actualLen != 0 {
+				actualOutputBuff = filter(actualOutputBuff[:actualLen])
+			}
 		}
 
 		if len(expectedOutputBuff) != len(actualOutputBuff) ||
@@ -90,7 +94,10 @@ func readFloat64(r io.Reader) (float64, error) {
 	if n, err := io.ReadFull(r, buff); err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 		return 0., err
 	} else {
-		buff = filter(buff[:n])
+		if n != 0 {
+			buff = filter(buff[:n])
+		}
+
 		res, err = strconv.ParseFloat(string(buff), 64)
 		if err != nil {
 			return 0., err
@@ -113,8 +120,13 @@ func compareLines(expected, actual io.Reader) (bool, error) {
 			return false, actualErr
 		}
 
-		expectedOutputLine = filter(expectedOutputLine)
-		actualOutputLine = filter(actualOutputLine)
+		// ignore SPACE or ENTER at the end of each line
+		if len(expectedOutputLine) != 0 {
+			expectedOutputLine = filter(expectedOutputLine)
+		}
+		if len(actualOutputLine) != 0 {
+			actualOutputLine = filter(actualOutputLine)
+		}
 
 		if len(expectedOutputLine) != len(actualOutputLine) ||
 			!reflect.DeepEqual(expectedOutputLine, actualOutputLine) {
@@ -149,8 +161,12 @@ func compareHash(expected, actual io.Reader, buffLen int, hashFunc func(data []b
 
 		if expectedLen < buffLen {
 			// finish reading expected, ignore SPACE or ENTER at the end of buff
-			expectedOutputBuff = filter(expectedOutputBuff[:expectedLen])
-			actualOutputBuff = filter(actualOutputBuff[:actualLen])
+			if expectedLen != 0 {
+				expectedOutputBuff = filter(expectedOutputBuff[:expectedLen])
+			}
+			if actualLen != 0 {
+				actualOutputBuff = filter(actualOutputBuff[:actualLen])
+			}
 		}
 
 		if len(expectedOutputBuff) != len(actualOutputBuff) ||

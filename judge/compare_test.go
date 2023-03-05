@@ -19,6 +19,9 @@ func TestCompareBytes(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, ok)
 
+	_, err = expected.Seek(0, 0)
+	assert.NoError(t, err)
+
 	wrong, err := os.Open("tests/compare/bytes.wrong")
 	assert.NoError(t, err)
 
@@ -38,6 +41,9 @@ func TestCompareFloats(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, ok)
 
+	_, err = expected.Seek(0, 0)
+	assert.NoError(t, err)
+
 	wrong, err := os.Open("tests/compare/float.wrong")
 	assert.NoError(t, err)
 
@@ -56,6 +62,9 @@ func TestCompareLines(t *testing.T) {
 	ok, err := compareLines(expected, correct)
 	assert.NoError(t, err)
 	assert.True(t, ok)
+
+	_, err = expected.Seek(0, 0)
+	assert.NoError(t, err)
 
 	wrong, err := os.Open("tests/compare/lines.wrong")
 	assert.NoError(t, err)
@@ -80,6 +89,9 @@ func TestCompareHash(t *testing.T) {
 	ok, err := compareHash(expected, correct, 1024, md5)
 	assert.NoError(t, err)
 	assert.True(t, ok)
+
+	_, err = expected.Seek(0, 0)
+	assert.NoError(t, err)
 
 	wrong, err := os.Open("tests/compare/bytes.wrong")
 	assert.NoError(t, err)
