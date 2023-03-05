@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"reflect"
 	"strings"
 	"time"
 
@@ -278,7 +276,7 @@ func (m *Manager) Judge(
 		return judgeRes, err
 	}
 
-	ok, err = compare(testcaseOutputReader, executeRes.Stdout, 1024) // Only judge on executeRes.Stdout, ignore executeRes.Stderr
+	ok, err = compareBytes(testcaseOutputReader, executeRes.Stdout, 1024) // Only judge on executeRes.Stdout, ignore executeRes.Stderr
 	if err != nil {
 		judgeRes.Conclusion = model.Conclusion_InternalError
 		return judgeRes, err
@@ -292,45 +290,4 @@ func (m *Manager) Judge(
 	}
 
 	return judgeRes, nil
-}
-
-// Compare compares actual content to expected content, return the result whether they are equal.
-// It should just be called by func Judge.
-func compare(expected, actual io.Reader, buffLen int) (bool, error) {
-	expectedOutputBuff := make([]byte, buffLen)
-	actualOutputBuff := make([]byte, buffLen)
-	var expectedLen, actualLen int
-	var err error
-	for {
-		expectedLen, err = io.ReadFull(expected, expectedOutputBuff)
-		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-			return false, err
-		}
-
-		actualLen, err = io.ReadFull(actual, actualOutputBuff)
-		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-			return false, err
-		}
-
-		if actualLen == expectedLen+1 {
-			if actualOutputBuff[actualLen-1] == ' ' || actualOutputBuff[actualLen-1] == '\n' {
-				// cut off ' ' or '\n' at the end of executeOutputBuff
-				actualLen--
-			} else {
-				return false, nil
-			}
-		} else if actualLen > expectedLen+1 || actualLen < expectedLen {
-			return false, nil
-		}
-
-		if !reflect.DeepEqual(expectedOutputBuff[:expectedLen], actualOutputBuff[:actualLen]) {
-			return false, nil
-		}
-
-		if expectedLen < buffLen {
-			break
-		}
-	}
-
-	return true, nil
 }
