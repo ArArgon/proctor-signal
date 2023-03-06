@@ -8,14 +8,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCompareBytes(t *testing.T) {
+func TestCompareAll(t *testing.T) {
 	expected, err := os.Open("tests/compare/bytes.expected")
 	assert.NoError(t, err)
 
 	correct, err := os.Open("tests/compare/bytes.correct")
 	assert.NoError(t, err)
 
-	ok, err := compareBytes(expected, correct, 1024)
+	ok, err := compareAll(expected, correct, 1024)
 	assert.NoError(t, err)
 	assert.True(t, ok)
 
@@ -25,7 +25,7 @@ func TestCompareBytes(t *testing.T) {
 	wrong, err := os.Open("tests/compare/bytes.wrong")
 	assert.NoError(t, err)
 
-	ok, err = compareBytes(expected, wrong, 1024)
+	ok, err = compareAll(expected, wrong, 1024)
 	assert.NoError(t, err)
 	assert.False(t, ok)
 }
@@ -59,7 +59,7 @@ func TestCompareLines(t *testing.T) {
 	correct, err := os.Open("tests/compare/lines.correct")
 	assert.NoError(t, err)
 
-	ok, err := compareLines(expected, correct)
+	ok, err := compareLines(expected, correct, false)
 	assert.NoError(t, err)
 	assert.True(t, ok)
 
@@ -69,9 +69,16 @@ func TestCompareLines(t *testing.T) {
 	wrong, err := os.Open("tests/compare/lines.wrong")
 	assert.NoError(t, err)
 
-	ok, err = compareLines(expected, wrong)
+	ok, err = compareLines(expected, wrong, false)
 	assert.NoError(t, err)
 	assert.False(t, ok)
+
+	correct = wrong
+	assert.NoError(t, err)
+
+	ok, err = compareLines(expected, correct, true)
+	assert.NoError(t, err)
+	assert.True(t, ok)
 }
 
 func TestCompareHash(t *testing.T) {
