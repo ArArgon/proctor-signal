@@ -13,7 +13,7 @@ import (
 // Compare funcs compare actual content to expected content, return the result whether they are equal.
 // It should just be called by func Judge.
 
-func compareBytes(expected, actual io.Reader, buffLen int) (bool, error) {
+func compareAll(expected, actual io.Reader, buffLen int) (bool, error) {
 	expectedOutputBuff := make([]byte, buffLen)
 	actualOutputBuff := make([]byte, buffLen)
 	var expectedLen, actualLen int
@@ -27,16 +27,6 @@ func compareBytes(expected, actual io.Reader, buffLen int) (bool, error) {
 		actualLen, err = io.ReadFull(actual, actualOutputBuff)
 		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 			return false, err
-		}
-
-		if expectedLen < buffLen {
-			// finish reading expected, ignore SPACE or ENTER at the end of buff
-			if expectedLen != 0 {
-				expectedOutputBuff = filter(expectedOutputBuff[:expectedLen])
-			}
-			if actualLen != 0 {
-				actualOutputBuff = filter(actualOutputBuff[:actualLen])
-			}
 		}
 
 		if len(expectedOutputBuff) != len(actualOutputBuff) ||
@@ -60,9 +50,9 @@ func filter(data []byte) []byte {
 	if data[l-1] == '\r' {
 		l--
 	}
-	if data[l-1] == ' ' {
-		l--
-	}
+	// if data[l-1] == ' ' {
+	// 	l--
+	// }
 	return data[:l]
 }
 
@@ -106,26 +96,56 @@ func readFloat64(r io.Reader) (float64, error) {
 	return res, nil
 }
 
-func compareLines(expected, actual io.Reader) (bool, error) {
+func compareLines(expected, actual io.Reader, ignoreNewline bool) (bool, error) {
 	expectedBuffReader := bufio.NewReader(expected)
 	actualBuffReader := bufio.NewReader(actual)
 	for {
-		expectedOutputLine, _, expectedErr := expectedBuffReader.ReadLine()
+		expectedOutputLine, expectedErr := expectedBuffReader.ReadSlice('\n')
 		if expectedErr != nil && expectedErr != io.EOF && expectedErr != io.ErrUnexpectedEOF {
 			return false, expectedErr
 		}
 
-		actualOutputLine, _, actualErr := actualBuffReader.ReadLine()
+		actualOutputLine, actualErr := actualBuffReader.ReadSlice('\n')
 		if actualErr != nil && actualErr != io.EOF && actualErr != io.ErrUnexpectedEOF {
 			return false, actualErr
 		}
 
-		// ignore SPACE or ENTER at the end of each line
-		if len(expectedOutputLine) != 0 {
-			expectedOutputLine = filter(expectedOutputLine)
+		if expectedErr == io.EOF && actualErr == io.EOF &&
+			len(expectedOutputLine) == 0 && len(actualOutputLine) == 0 {
+			// both expectedBuffReader and actualBuffReader have '\n' at the end, and both next line is empty
+			if ignoreNewline {
+				return true, nil
+			} else {
+				return false, nil
+			}
 		}
-		if len(actualOutputLine) != 0 {
-			actualOutputLine = filter(actualOutputLine)
+
+		if ignoreNewline && expectedErr == io.EOF && actualErr != io.EOF {
+			// expectedBuffReader do not have '\n' at the end, but actualBuffReader do
+			buff, actualErr := actualBuffReader.ReadSlice('\n')
+			if actualErr != nil && actualErr != io.EOF && actualErr != io.ErrUnexpectedEOF {
+				return false, actualErr
+			}
+
+			if len(buff) == 0 && actualErr == io.EOF {
+				// actualBuffReader's next line is empty
+				actualOutputLine = filter(actualOutputLine)
+			} else {
+				return false, nil
+			}
+		} else if actualErr == io.EOF && expectedErr != io.EOF {
+			// actualBuffReader do not have '\n' at the end, but expectedBuffReader do
+			buff, actualErr := expectedBuffReader.ReadSlice('\n')
+			if actualErr != nil && actualErr != io.EOF && actualErr != io.ErrUnexpectedEOF {
+				return false, actualErr
+			}
+
+			if len(buff) == 0 && actualErr == io.EOF {
+				// expectedBuffReader's next line is empty
+				expectedOutputLine = filter(expectedOutputLine)
+			} else {
+				return false, nil
+			}
 		}
 
 		if len(expectedOutputLine) != len(actualOutputLine) ||
@@ -133,10 +153,7 @@ func compareLines(expected, actual io.Reader) (bool, error) {
 			return false, nil
 		}
 
-		if expectedErr == io.EOF {
-			if actualErr != io.EOF {
-				return false, nil
-			}
+		if expectedErr == io.EOF || actualErr == io.EOF {
 			break
 		}
 	}
