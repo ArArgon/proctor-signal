@@ -257,7 +257,7 @@ func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
 
 func fsKey(p *model.Problem, key string) string {
 	binFileKey := key
-	if p != nil || (p.Id == "" && p.Ver == "") {
+	if p != nil && p.Id != "" && p.Ver != "" {
 		binFileKey = resource.ResKey(p, binFileKey)
 	}
 
