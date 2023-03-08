@@ -136,7 +136,7 @@ func TestExecute(t *testing.T) {
 }
 
 func TestJudge(t *testing.T) {
-	p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
+	p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600, DiffPolicy: model.DiffPolicy_LINE}
 	ctx := context.Background()
 
 	var err error

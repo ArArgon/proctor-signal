@@ -99,12 +99,12 @@ func compareLines(expected, actual io.Reader, ignoreNewline bool) (bool, error) 
 	for {
 		// Readline will ignore '\n'
 		expectedOutputLine, _, expectedErr := expectedBuffReader.ReadLine()
-		if expectedErr != nil && expectedErr != io.EOF && expectedErr != io.ErrUnexpectedEOF {
+		if expectedErr != nil && expectedErr != io.EOF {
 			return false, expectedErr
 		}
 
 		actualOutputLine, actualErr := actualBuffReader.ReadSlice('\n')
-		if actualErr != nil && actualErr != io.EOF && actualErr != io.ErrUnexpectedEOF {
+		if actualErr != nil && actualErr != io.EOF {
 			return false, actualErr
 		}
 
