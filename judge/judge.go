@@ -257,7 +257,7 @@ func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
 
 func fsKey(p *model.Problem, key string) string {
 	binFileKey := key
-	if p != nil {
+	if p != nil || (p.Id == "" && p.Ver == "") {
 		binFileKey = resource.ResKey(p, binFileKey)
 	}
 
@@ -305,7 +305,7 @@ func (m *Manager) Judge(
 	// Only judge on executeRes.Stdout, ignore executeRes.Stderr
 	if p == nil {
 		// TODO: just for test, need to be optimize!
-		ok, err = compareLines(testcaseOutputReader, executeRes.Stdout, p.IgnoreNewline)
+		ok, err = compareLines(testcaseOutputReader, executeRes.Stdout, true)
 	} else {
 		switch p.DiffPolicy {
 		case model.DiffPolicy_FLOAT:

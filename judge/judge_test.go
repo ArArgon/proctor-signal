@@ -136,7 +136,12 @@ func TestExecute(t *testing.T) {
 }
 
 func TestJudge(t *testing.T) {
-	p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600, DiffPolicy: model.DiffPolicy_LINE}
+	p := &model.Problem{
+		DefaultTimeLimit:  uint32(time.Second),
+		DefaultSpaceLimit: 104857600,
+		DiffPolicy:        model.DiffPolicy_LINE,
+		IgnoreNewline:     true,
+	}
 	ctx := context.Background()
 
 	var err error
@@ -152,7 +157,7 @@ func TestJudge(t *testing.T) {
 	for language := range languageConfig {
 		t.Run(language, func(t *testing.T) {
 			judgeRes, err := judgeManger.Judge(
-				ctx, nil, language, fileCaches[language], testcase,
+				ctx, p, language, fileCaches[language], testcase,
 				time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit),
 			)
 			assert.NotNil(t, judgeRes)
@@ -262,16 +267,6 @@ func TestCompileMultiOptions(t *testing.T) {
 
 	assert.Equal(t, "8888889885\n", string(bytes), fmt.Sprintf("executeRes: %+v", executeRes))
 }
-
-// TODO: should be moved to worker_test after
-// func TestRemoveOutputFiles(t *testing.T) {
-// 	for _, f := range outputFileCaches {
-// 		if err := os.Remove(f.Name()); err != nil {
-// 			t.Errorf("failed to remove file: %s", f.Name())
-// 		}
-// 		f.Close()
-// 	}
-// }
 
 func TestNoCompilation(t *testing.T) {
 	language := "python"
