@@ -18,7 +18,6 @@ import (
 	"proctor-signal/resource"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/criyle/go-sandbox/runner"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.uber.org/multierr"
@@ -271,13 +270,8 @@ func (w *Worker) judgeOnDAG(
 			caseResult := &model.CaseResult{Id: uint32(i)}
 			subResult.CaseResults = append(subResult.CaseResults, caseResult)
 
-			timeLimit := time.Duration(p.DefaultTimeLimit) * time.Millisecond
-			spaceLimit := runner.Size(p.DefaultSpaceLimit * 1024 * 1024) // Megabytes.
-
 			var judgeRes *judge.JudgeRes
-			judgeRes, err = w.judge.Judge(
-				ctx, p, sub.Language, artifactIDs, testcase, timeLimit, spaceLimit,
-			)
+			judgeRes, err = w.judge.Judge(ctx, p, sub.Language, artifactIDs, testcase)
 			if judgeRes != nil {
 				outputFileCaches = append(outputFileCaches, judgeRes.Stdout, judgeRes.Stderr)
 			}

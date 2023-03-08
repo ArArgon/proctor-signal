@@ -239,8 +239,8 @@ func fsKey(p *model.Problem, key string) string {
 }
 
 func (m *Manager) Judge(
-	ctx context.Context, p *model.Problem, language string, copyInFileIDs map[string]string,
-	testcase *model.TestCase, CPULimit time.Duration, memoryLimit runner.Size,
+	ctx context.Context, p *model.Problem, language string,
+	copyInFileIDs map[string]string, testcase *model.TestCase,
 ) (*JudgeRes, error) {
 	conf, ok := m.lang[language]
 	if !ok {
@@ -250,7 +250,8 @@ func (m *Manager) Judge(
 	executeRes, err := m.Execute(
 		ctx, strings.Join(conf.getRunCmd(), " "),
 		&worker.CachedFile{FileID: fsKey(p, testcase.InputKey)}, copyInFileIDs,
-		CPULimit*time.Duration(conf.raw.ResourceFactor), memoryLimit*runner.Size(conf.raw.ResourceFactor),
+		time.Duration(p.DefaultTimeLimit)*time.Millisecond*time.Duration(conf.raw.ResourceFactor),
+		runner.Size(p.DefaultSpaceLimit*1024*1024)*runner.Size(conf.raw.ResourceFactor),
 	)
 	if executeRes == nil {
 		return nil, err
@@ -277,19 +278,15 @@ func (m *Manager) Judge(
 	}
 
 	// Only judge on executeRes.Stdout, ignore executeRes.Stderr
-	if p == nil {
-		// TODO: just for test, need to be optimize!
-		ok, err = compareLines(testcaseOutputReader, executeRes.Stdout, true)
-	} else {
-		switch p.DiffPolicy {
-		case model.DiffPolicy_FLOAT:
-			ok, err = compareFloats(testcaseOutputReader, executeRes.Stdout, int(*p.FloatEps))
-		case model.DiffPolicy_LINE:
-			ok, err = compareLines(testcaseOutputReader, executeRes.Stdout, p.IgnoreNewline)
-		default:
-			ok, err = compareAll(testcaseOutputReader, executeRes.Stdout, 1024)
-		}
+	switch p.DiffPolicy {
+	case model.DiffPolicy_FLOAT:
+		ok, err = compareFloats(testcaseOutputReader, executeRes.Stdout, int(*p.FloatEps))
+	case model.DiffPolicy_LINE:
+		ok, err = compareLines(testcaseOutputReader, executeRes.Stdout, p.IgnoreNewline)
+	default:
+		ok, err = compareAll(testcaseOutputReader, executeRes.Stdout, 1024)
 	}
+
 	if err != nil {
 		judgeRes.Conclusion = model.Conclusion_InternalError
 		return judgeRes, err
