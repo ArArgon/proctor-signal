@@ -152,7 +152,7 @@ func TestJudge(t *testing.T) {
 	for language := range languageConfig {
 		t.Run(language, func(t *testing.T) {
 			judgeRes, err := judgeManger.Judge(
-				ctx, p, language, fileCaches[language], testcase,
+				ctx, nil, language, fileCaches[language], testcase,
 				time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit),
 			)
 			assert.NotNil(t, judgeRes)

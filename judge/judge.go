@@ -277,13 +277,18 @@ func (m *Manager) Judge(
 	}
 
 	// Only judge on executeRes.Stdout, ignore executeRes.Stderr
-	switch p.DiffPolicy {
-	case model.DiffPolicy_FLOAT:
-		ok, err = compareFloats(testcaseOutputReader, executeRes.Stdout, int(*p.FloatEps))
-	case model.DiffPolicy_LINE:
+	if p == nil {
+		// TODO: just for test, need to be optimize!
 		ok, err = compareLines(testcaseOutputReader, executeRes.Stdout, p.IgnoreNewline)
-	default:
-		ok, err = compareAll(testcaseOutputReader, executeRes.Stdout, 1024)
+	} else {
+		switch p.DiffPolicy {
+		case model.DiffPolicy_FLOAT:
+			ok, err = compareFloats(testcaseOutputReader, executeRes.Stdout, int(*p.FloatEps))
+		case model.DiffPolicy_LINE:
+			ok, err = compareLines(testcaseOutputReader, executeRes.Stdout, p.IgnoreNewline)
+		default:
+			ok, err = compareAll(testcaseOutputReader, executeRes.Stdout, 1024)
+		}
 	}
 	if err != nil {
 		judgeRes.Conclusion = model.Conclusion_InternalError
