@@ -1,109 +1,113 @@
 package judge
 
 import (
-	"crypto/md5"
-	"os"
+	"bytes"
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
+func reseek(t *testing.T, seekers ...io.Seeker) error {
+	for _, seeker := range seekers {
+		_, err := seeker.Seek(0, 0)
+		assert.NoError(t, err)
+	}
+	return nil
+}
+
 func TestCompareAll(t *testing.T) {
-	expected, err := os.Open("tests/compare/bytes.expected")
-	assert.NoError(t, err)
+	expected := bytes.NewReader([]byte("12345\n67890\nabcdefg\nhijklmn\nopqrst\nuvwxyz\n"))
+	correct := bytes.NewReader([]byte("12345\n67890\nabcdefg\nhijklmn\nopqrst\nuvwxyz\n"))
+	wrong := bytes.NewReader([]byte("12345\n67890\nabcdefg\nhijklmn\nopqrst\nuvwxyz"))
 
-	correct, err := os.Open("tests/compare/bytes.correct")
-	assert.NoError(t, err)
+	for name, hashFunc := range hashFuncs {
+		t.Run(name, func(t *testing.T) {
+			ok, err := compareAll(expected, correct, 16, hashFunc)
+			assert.NoError(t, err)
+			assert.True(t, ok)
+			reseek(t, expected, correct)
 
-	ok, err := compareAll(expected, correct, 1024)
-	assert.NoError(t, err)
-	assert.True(t, ok)
-
-	_, err = expected.Seek(0, 0)
-	assert.NoError(t, err)
-
-	wrong, err := os.Open("tests/compare/bytes.wrong")
-	assert.NoError(t, err)
-
-	ok, err = compareAll(expected, wrong, 1024)
-	assert.NoError(t, err)
-	assert.False(t, ok)
+			ok, err = compareAll(expected, wrong, 16, hashFunc)
+			assert.NoError(t, err)
+			assert.False(t, ok)
+			reseek(t, expected, wrong)
+		})
+	}
 }
 
 func TestCompareFloats(t *testing.T) {
-	expected, err := os.Open("tests/compare/float.expected")
-	assert.NoError(t, err)
-
-	correct, err := os.Open("tests/compare/float.correct")
-	assert.NoError(t, err)
+	expected := bytes.NewReader([]byte("3.1415926"))
+	correct := bytes.NewReader([]byte("3.14159265"))
+	wrong := bytes.NewReader([]byte("3.1415928"))
 
 	ok, err := compareFloats(expected, correct, 7)
 	assert.NoError(t, err)
 	assert.True(t, ok)
-
-	_, err = expected.Seek(0, 0)
-	assert.NoError(t, err)
-
-	wrong, err := os.Open("tests/compare/float.wrong")
-	assert.NoError(t, err)
+	reseek(t, expected, correct)
 
 	ok, err = compareFloats(expected, wrong, 7)
 	assert.NoError(t, err)
 	assert.False(t, ok)
+	reseek(t, expected, correct)
 }
 
 func TestCompareLines(t *testing.T) {
-	expected, err := os.Open("tests/compare/lines.expected")
-	assert.NoError(t, err)
-
-	correct, err := os.Open("tests/compare/lines.correct")
-	assert.NoError(t, err)
-
-	ok, err := compareLines(expected, correct, false)
-	assert.NoError(t, err)
-	assert.True(t, ok)
-
-	_, err = expected.Seek(0, 0)
-	assert.NoError(t, err)
-
-	wrong, err := os.Open("tests/compare/lines.wrong")
-	assert.NoError(t, err)
-
-	ok, err = compareLines(expected, wrong, false)
-	assert.NoError(t, err)
-	assert.False(t, ok)
-
-	correct = wrong
-	assert.NoError(t, err)
-
-	ok, err = compareLines(expected, correct, true)
-	assert.NoError(t, err)
-	assert.True(t, ok)
-}
-
-func TestCompareHash(t *testing.T) {
-	md5 := func(data []byte) []byte {
-		res := md5.Sum(data)
-		return res[:]
+	expectedTestcases := map[string]*bytes.Reader{
+		"expectedWithNewline":        bytes.NewReader([]byte("12345\n67890\nabcdefg\nhijklmn\nopq rst\nuvw xyz\n")),
+		"expectedWithoutNewline":     bytes.NewReader([]byte("12345\n67890\nabcdefg\nhijklmn\nopq rst\nuvw xyz")),
+		"expectedWithDifferentEnter": bytes.NewReader([]byte("12345\n67890\r\nabcdefg\nhijklmn\r\nopq rst\nuvwx yz")),
 	}
 
-	expected, err := os.Open("tests/compare/bytes.expected")
-	assert.NoError(t, err)
+	actualWithNewline := bytes.NewReader([]byte("12345\n67890\nabcdefg\nhijklmn\nopq rst\nuvw xyz\n"))
+	actualWithoutNewline := bytes.NewReader([]byte("12345\n67890\nabcdefg\nhijklmn\nopq rst\nuvw xyz"))
+	actualWithDifferentEnter := bytes.NewReader([]byte("12345\n67890\r\nabcdefg\nhijklmn\r\nopq rst\nuvw xyz\r\n"))
 
-	correct, err := os.Open("tests/compare/bytes.correct")
-	assert.NoError(t, err)
+	for name, expected := range expectedTestcases {
+		t.Run(name, func(t *testing.T) {
+			ignoreNewline := true
+			t.Run("ignoreNewline", func(t *testing.T) {
+				for name, hashFunc := range hashFuncs {
+					t.Run(name, func(t *testing.T) {
+						ok, err := compareLines(expected, actualWithoutNewline, ignoreNewline, hashFunc)
+						assert.NoError(t, err)
+						assert.True(t, ok)
+						reseek(t, expected, actualWithoutNewline)
 
-	ok, err := compareHash(expected, correct, 1024, md5)
-	assert.NoError(t, err)
-	assert.True(t, ok)
+						ok, err = compareLines(expected, actualWithNewline, ignoreNewline, hashFunc)
+						assert.NoError(t, err)
+						assert.True(t, ok)
+						reseek(t, expected, actualWithNewline)
 
-	_, err = expected.Seek(0, 0)
-	assert.NoError(t, err)
+						ok, err = compareLines(expected, actualWithDifferentEnter, ignoreNewline, hashFunc)
+						assert.NoError(t, err)
+						assert.True(t, ok)
+						reseek(t, expected, actualWithDifferentEnter)
+					})
+				}
+			})
 
-	wrong, err := os.Open("tests/compare/bytes.wrong")
-	assert.NoError(t, err)
+			ignoreNewline = false
+			t.Run("notIgnoreNewline", func(t *testing.T) {
+				for name, hashFunc := range hashFuncs {
+					t.Run(name, func(t *testing.T) {
+						ok, err := compareLines(expected, actualWithoutNewline, ignoreNewline, hashFunc)
+						assert.NoError(t, err)
+						assert.True(t, ok)
+						reseek(t, expected, actualWithoutNewline)
 
-	ok, err = compareHash(expected, wrong, 1024, md5)
-	assert.NoError(t, err)
-	assert.False(t, ok)
+						ok, err = compareLines(expected, actualWithNewline, ignoreNewline, hashFunc)
+						assert.NoError(t, err)
+						assert.False(t, ok)
+						reseek(t, expected, actualWithNewline)
+
+						ok, err = compareLines(expected, actualWithDifferentEnter, ignoreNewline, hashFunc)
+						assert.NoError(t, err)
+						assert.False(t, ok)
+						reseek(t, expected, actualWithDifferentEnter)
+					})
+				}
+			})
+		})
+	}
 }
