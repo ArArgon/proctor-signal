@@ -8,12 +8,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func reseek(t *testing.T, seekers ...io.Seeker) error {
+func reseek(t *testing.T, seekers ...io.Seeker) {
 	for _, seeker := range seekers {
 		_, err := seeker.Seek(0, 0)
 		assert.NoError(t, err)
 	}
-	return nil
 }
 
 func TestCompareAll(t *testing.T) {
@@ -56,7 +55,7 @@ func TestCompareLines(t *testing.T) {
 	expectedTestcases := map[string]*bytes.Reader{
 		"expectedWithNewline":        bytes.NewReader([]byte("12345\n67890\nabcdefg\nhijklmn\nopq rst\nuvw xyz\n")),
 		"expectedWithoutNewline":     bytes.NewReader([]byte("12345\n67890\nabcdefg\nhijklmn\nopq rst\nuvw xyz")),
-		"expectedWithDifferentEnter": bytes.NewReader([]byte("12345\n67890\r\nabcdefg\nhijklmn\r\nopq rst\nuvwx yz")),
+		"expectedWithDifferentEnter": bytes.NewReader([]byte("12345\n67890\r\nabcdefg\nhijklmn\r\nopq rst\nuvw xyz")),
 	}
 
 	actualWithNewline := bytes.NewReader([]byte("12345\n67890\nabcdefg\nhijklmn\nopq rst\nuvw xyz\n"))
