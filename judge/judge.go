@@ -308,9 +308,9 @@ func (m *Manager) Judge(
 	case model.DiffPolicy_FLOAT:
 		ok, err = compareFloats(testcaseOutputReader, executeRes.Stdout, int(*p.FloatEps))
 	case model.DiffPolicy_LINE:
-		ok, err = compareLines(testcaseOutputReader, executeRes.Stdout, p.IgnoreNewline)
+		ok, err = compareLines(testcaseOutputReader, executeRes.Stdout, p.IgnoreNewline, hashFuncs["md5"])
 	default:
-		ok, err = compareAll(testcaseOutputReader, executeRes.Stdout, 1024)
+		ok, err = compareAll(testcaseOutputReader, executeRes.Stdout, 1024, hashFuncs["md5"])
 	}
 
 	if err != nil {
