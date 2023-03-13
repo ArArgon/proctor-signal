@@ -6,7 +6,7 @@ CompileCmd = "$Compiler $Args ${SourceName} -o ${ArtifactName}"
 CompileTimeLimit = 20000 # ms
 CompileSpaceLimit = 134217728 # 128MB
 ExecuteCmd = "a.out"
-Options = { o2 = "-O2", cpp14 = "--std=c++14" }
+Options = { o2 = "-O2", cpp14 = "--std=c++14", cpp17 = "--std=c++17", cpp11 = "--std=c++11" }
 ResourceFactor = 1
 
 [languageConf.c]
@@ -17,6 +17,7 @@ CompileCmd = "$Compiler $Args ${SourceName} -o ${ArtifactName}"
 CompileTimeLimit = 10000 # ms
 CompileSpaceLimit = 134217728 # 128MB
 ExecuteCmd = "a.out"
+Options = { o2 = "-O2", c11 = "--std=c11" }
 ResourceFactor = 1
 
 [languageConf.java]
@@ -29,4 +30,11 @@ CompileTimeLimit = 20000 # ms
 CompileSpaceLimit = 536870912 # 512MB
 ExecuteCmd = "$JAVA_HOME/bin/java $CLASS_NAME"
 Options = { "java11" = "--source 11", "java8" = "--source 8" }
+ResourceFactor = 2
+
+[languageConf.python]
+NoCompilation = true
+SourceName = 'source.py'
+Compiler = '/usr/bin/python3'
+ExecuteCmd = '$Compiler $SourceName'
 ResourceFactor = 2

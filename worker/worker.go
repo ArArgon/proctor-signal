@@ -194,15 +194,20 @@ func (w *Worker) compile(
 	compileRes, err := w.judge.Compile(ctx, sub)
 
 	defer func() {
-		if compileRes != nil {
+		if compileRes == nil {
+			return
+		}
+		if compileRes.Stdout != nil {
 			_ = compileRes.Stdout.Close()
+		}
+		if compileRes.Stderr != nil {
 			_ = compileRes.Stderr.Close()
 		}
 	}()
 
 	if err != nil {
 		// Internal error.
-		sugar.Error("an internal error occurred during compilation: %+v", err)
+		sugar.Errorf("an internal error occurred during compilation: %+v", err)
 		if compileRes != nil {
 			w.judge.RemoveFiles(compileRes.ArtifactFileIDs)
 		}
@@ -211,8 +216,11 @@ func (w *Worker) compile(
 	}
 
 	result.ErrMessage = lo.ToPtr(compileRes.Error)
-	compilerStderr, _ := io.ReadAll(compileRes.Stderr)
-	result.CompilerOutput = lo.ToPtr(string(compilerStderr))
+	var compilerStderr []byte
+	if compileRes.Stderr != nil {
+		compilerStderr, _ = io.ReadAll(compileRes.Stderr)
+		result.CompilerOutput = lo.ToPtr(string(compilerStderr))
+	}
 
 	if compileRes.Status != envexec.StatusAccepted {
 		// Compile error (not an internal error).

@@ -22,8 +22,9 @@ var (
 type languageConf struct {
 	raw config.LanguageConfEntity
 
-	env  map[string]string
-	vars map[string]string
+	env             map[string]string
+	vars            map[string]string
+	needCompilation bool
 }
 
 func extractVar(s string) string {
@@ -107,6 +108,7 @@ func (l *languageConf) normalize() error {
 		l.vars[key] = val
 	}
 
+	l.needCompilation = !l.raw.NoCompilation
 	l.vars["Compiler"] = l.eval(l.raw.Compiler)
 	l.vars["SourceName"] = l.eval(l.raw.SourceName)
 	l.vars["ArtifactName"] = l.eval(l.raw.ArtifactName)
@@ -152,4 +154,8 @@ func (l *languageConf) getSourceName() string {
 
 func (l *languageConf) getArtifactName() string {
 	return l.vars["ArtifactName"]
+}
+
+func (l *languageConf) needCompile() bool {
+	return l.needCompilation
 }
