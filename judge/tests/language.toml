@@ -19,3 +19,9 @@ ExecuteCmd = "a.out"
 Options = {o = "-o a.out"} # for options test
 ResourceFactor = 1
 
+[languageConf.python]
+NoCompilation = true
+SourceName = 'source.py'
+Compiler = '/usr/bin/python3'
+ExecuteCmd = '/usr/bin/python3 source.py'
+ResourceFactor = 2
