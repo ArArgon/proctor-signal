@@ -97,6 +97,32 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 		return nil, fmt.Errorf("compile config for %s not found", sub.Language)
 	}
 
+	if !compileConf.needCompile() {
+		// New file in fileStore.
+		srcFile, err := m.fs.New()
+		if err != nil {
+			return nil, err
+		}
+
+		// Write source code into it.
+		_, err = srcFile.Write(sub.SourceCode)
+		if err != nil {
+			return nil, err
+		}
+
+		// Add this file to fileStore with name `compileConf.getSourceName()`.
+		srcId, err := m.fs.Add(compileConf.getSourceName(), srcFile.Name())
+		if err != nil {
+			return nil, err
+		}
+
+		// Compose result with source code as an artifact.
+		return &CompileRes{
+			ExecuteRes:      ExecuteRes{Status: envexec.StatusAccepted},
+			ArtifactFileIDs: map[string]string{compileConf.getSourceName(): srcId},
+		}, nil
+	}
+
 	args, err := compileConf.evalCompileCmd(sub)
 	if err != nil {
 		return nil, fmt.Errorf("failed to compose compilation Cmd, err: %+v", err)

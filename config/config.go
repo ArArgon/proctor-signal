@@ -21,10 +21,11 @@ type JudgeConfig judgeconfig.Config
 type LanguageConfEntity struct {
 	SourceName        string            `yaml:"SourceName"`
 	ArtifactName      string            `yaml:"ArtifactName"`
+	NoCompilation     bool              `default:"false" yaml:"NoCompilation"`
 	Compiler          string            `yaml:"Compiler"`
 	CompileCmd        string            `yaml:"CompileCmd"`
-	CompileTimeLimit  uint32            `yaml:"CompileTimeLimit"`
-	CompileSpaceLimit uint64            `yaml:"CompileSpaceLimit"`
+	CompileTimeLimit  uint32            `default:"20000" yaml:"CompileTimeLimit"`
+	CompileSpaceLimit uint64            `default:"134217728" yaml:"CompileSpaceLimit"`
 	ExecuteCmd        string            `yaml:"ExecuteCmd"`
 	Environment       []string          `yaml:"Environment"`
 	ResourceFactor    uint64            `yaml:"ResourceFactor"`
