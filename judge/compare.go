@@ -11,27 +11,34 @@ import (
 	"strconv"
 )
 
-var hashFuncs = map[string]func(data []byte) []byte{
-	"noHash": func(data []byte) []byte {
-		return data
-	},
-	"md5": func(data []byte) []byte {
-		res := md5.Sum(data)
-		return res[:]
-	},
+type compareFunc func(expected, actual []byte) (bool, error)
+
+func getMd5() compareFunc {
+	expectedHash := md5.New()
+	actualHash := md5.New()
+	return func(expected, actual []byte) (bool, error) {
+		if _, err := expectedHash.Write(expected); err != nil {
+			return false, err
+		}
+		if _, err := actualHash.Write(actual); err != nil {
+			return false, err
+		}
+		return reflect.DeepEqual(expectedHash.Sum(nil), actualHash.Sum(nil)), nil
+	}
 }
 
 // Compare funcs compare actual content to expected content, return the result whether they are equal.
 // It should just be called by func Judge.
 
-func compareAll(expected, actual io.Reader, buffLen int, hashFunc func(data []byte) []byte) (bool, error) {
+func compareAll(expected, actual io.Reader, buffLen int, fn compareFunc) (bool, error) {
 	expectedOutputBuff := make([]byte, buffLen)
 	actualOutputBuff := make([]byte, buffLen)
+
 	var expectedLen, actualLen int
 	var err error
-	if hashFunc == nil {
-		hashFunc = hashFuncs["noHash"]
-	}
+	// if hashFunc == nil {
+	// 	hashFunc = noHash
+	// }
 
 	for {
 		expectedLen, err = io.ReadFull(expected, expectedOutputBuff)
@@ -44,9 +51,16 @@ func compareAll(expected, actual io.Reader, buffLen int, hashFunc func(data []by
 			return false, err
 		}
 
-		if expectedLen != actualLen ||
-			!reflect.DeepEqual(hashFunc(expectedOutputBuff[:expectedLen]), hashFunc(actualOutputBuff[:actualLen])) {
+		if expectedLen != actualLen {
 			return false, nil
+		} else {
+			ok, err := fn(expectedOutputBuff[:expectedLen], actualOutputBuff[:actualLen])
+			if err != nil {
+				return false, err
+			}
+			if !ok {
+				return false, nil
+			}
 		}
 
 		if expectedLen < buffLen {
@@ -56,13 +70,13 @@ func compareAll(expected, actual io.Reader, buffLen int, hashFunc func(data []by
 	return true, nil
 }
 
-func compareLines(expected, actual io.Reader, ignoreNewline bool, hashFunc func(data []byte) []byte) (bool, error) {
+func compareLines(expected, actual io.Reader, ignoreNewline bool, fn compareFunc) (bool, error) {
 	expectedOutputScanner := bufio.NewScanner(expected)
 	actualOutputReader := bufio.NewReader(actual)
 	expectedOutputScanner.Scan()
-	if hashFunc == nil {
-		hashFunc = hashFuncs["noHash"]
-	}
+	// if hashFunc == nil {
+	// 	hashFunc = noHash
+	// }
 
 	for {
 		// expectedBuffScanner will ignore '\n'
@@ -76,9 +90,16 @@ func compareLines(expected, actual io.Reader, ignoreNewline bool, hashFunc func(
 			actualOutputLine = filter(actualOutputLine)
 		}
 
-		if len(expectedOutputLine) != len(actualOutputLine) ||
-			!reflect.DeepEqual(hashFunc(expectedOutputLine), hashFunc(actualOutputLine)) {
+		if len(expectedOutputLine) != len(actualOutputLine) {
 			return false, nil
+		} else {
+			ok, err := fn(expectedOutputLine, actualOutputLine)
+			if err != nil {
+				return false, err
+			}
+			if !ok {
+				return false, nil
+			}
 		}
 
 		if !expectedOutputScanner.Scan() {

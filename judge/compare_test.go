@@ -8,6 +8,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// var hashFuncs = map[string]func(data []byte) ([]byte, error){
+// 	"noHash": noHash,
+// 	"md5":    nil,
+// }
+
 func reseek(t *testing.T, seekers ...io.Seeker) {
 	for _, seeker := range seekers {
 		_, err := seeker.Seek(0, 0)
@@ -20,19 +25,15 @@ func TestCompareAll(t *testing.T) {
 	correct := bytes.NewReader([]byte("12345\n67890\nabcdefg\nhijklmn\nopqrst\nuvwxyz\n"))
 	wrong := bytes.NewReader([]byte("12345\n67890\nabcdefg\nhijklmn\nopqrst\nuvwxyz"))
 
-	for name, hashFunc := range hashFuncs {
-		t.Run(name, func(t *testing.T) {
-			ok, err := compareAll(expected, correct, 16, hashFunc)
-			assert.NoError(t, err)
-			assert.True(t, ok)
-			reseek(t, expected, correct)
+	ok, err := compareAll(expected, correct, 16, getMd5())
+	assert.NoError(t, err)
+	assert.True(t, ok)
+	reseek(t, expected, correct)
 
-			ok, err = compareAll(expected, wrong, 16, hashFunc)
-			assert.NoError(t, err)
-			assert.False(t, ok)
-			reseek(t, expected, wrong)
-		})
-	}
+	ok, err = compareAll(expected, wrong, 16, getMd5())
+	assert.NoError(t, err)
+	assert.False(t, ok)
+	reseek(t, expected, wrong)
 }
 
 func TestCompareFloats(t *testing.T) {
@@ -66,46 +67,38 @@ func TestCompareLines(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			ignoreNewline := true
 			t.Run("ignoreNewline", func(t *testing.T) {
-				for name, hashFunc := range hashFuncs {
-					t.Run(name, func(t *testing.T) {
-						ok, err := compareLines(expected, actualWithoutNewline, ignoreNewline, hashFunc)
-						assert.NoError(t, err)
-						assert.True(t, ok)
-						reseek(t, expected, actualWithoutNewline)
+				ok, err := compareLines(expected, actualWithoutNewline, ignoreNewline, getMd5())
+				assert.NoError(t, err)
+				assert.True(t, ok)
+				reseek(t, expected, actualWithoutNewline)
 
-						ok, err = compareLines(expected, actualWithNewline, ignoreNewline, hashFunc)
-						assert.NoError(t, err)
-						assert.True(t, ok)
-						reseek(t, expected, actualWithNewline)
+				ok, err = compareLines(expected, actualWithNewline, ignoreNewline, getMd5())
+				assert.NoError(t, err)
+				assert.True(t, ok)
+				reseek(t, expected, actualWithNewline)
 
-						ok, err = compareLines(expected, actualWithDifferentEnter, ignoreNewline, hashFunc)
-						assert.NoError(t, err)
-						assert.True(t, ok)
-						reseek(t, expected, actualWithDifferentEnter)
-					})
-				}
+				ok, err = compareLines(expected, actualWithDifferentEnter, ignoreNewline, getMd5())
+				assert.NoError(t, err)
+				assert.True(t, ok)
+				reseek(t, expected, actualWithDifferentEnter)
 			})
 
 			ignoreNewline = false
 			t.Run("notIgnoreNewline", func(t *testing.T) {
-				for name, hashFunc := range hashFuncs {
-					t.Run(name, func(t *testing.T) {
-						ok, err := compareLines(expected, actualWithoutNewline, ignoreNewline, hashFunc)
-						assert.NoError(t, err)
-						assert.True(t, ok)
-						reseek(t, expected, actualWithoutNewline)
+				ok, err := compareLines(expected, actualWithoutNewline, ignoreNewline, getMd5())
+				assert.NoError(t, err)
+				assert.True(t, ok)
+				reseek(t, expected, actualWithoutNewline)
 
-						ok, err = compareLines(expected, actualWithNewline, ignoreNewline, hashFunc)
-						assert.NoError(t, err)
-						assert.False(t, ok)
-						reseek(t, expected, actualWithNewline)
+				ok, err = compareLines(expected, actualWithNewline, ignoreNewline, getMd5())
+				assert.NoError(t, err)
+				assert.False(t, ok)
+				reseek(t, expected, actualWithNewline)
 
-						ok, err = compareLines(expected, actualWithDifferentEnter, ignoreNewline, hashFunc)
-						assert.NoError(t, err)
-						assert.False(t, ok)
-						reseek(t, expected, actualWithDifferentEnter)
-					})
-				}
+				ok, err = compareLines(expected, actualWithDifferentEnter, ignoreNewline, getMd5())
+				assert.NoError(t, err)
+				assert.False(t, ok)
+				reseek(t, expected, actualWithDifferentEnter)
 			})
 		})
 	}
