@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -11,6 +13,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/criyle/go-judge/filestore"
 	"github.com/samber/lo"
+	"github.com/tencentyun/cos-go-sdk-v5"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -66,7 +69,8 @@ func main() {
 
 	resManager := resource.NewResourceManager(logger, backendCli, fs.(*resource.FileStore))
 	judgeManager := lo.Must(judge.NewJudgeManager(work, conf, fs.(*resource.FileStore), logger))
-	w := judgeworker.NewWorker(judgeManager, resManager, backendCli, conf)
+	cosClient := newCOSClient()
+	w := judgeworker.NewWorker(judgeManager, resManager, backendCli, cosClient, conf)
 
 	w.Start(ctx, logger, judgeConf.Parallelism)
 
@@ -153,4 +157,19 @@ func newFileStore(conf *config.JudgeConfig) (filestore.FileStore, func() error) 
 		fs = filestore.NewTimeout(fs, conf.FileTimeout, timeoutCheckInterval)
 	}
 	return fs, cleanUp
+}
+
+// TODO: new COS client from conf
+func newCOSClient() *cos.Client {
+	u, err := url.Parse("https://hjj-1302703862.cos.ap-chengdu.myqcloud.com")
+	if err != nil {
+		log.Fatalf("failed to init COS client, err: %+v\n", err)
+	}
+
+	return cos.NewClient(&cos.BaseURL{BucketURL: u}, &http.Client{
+		Transport: &cos.AuthorizationTransport{
+			SecretID:  "AKIDtmaIrIZfZIrGTXQ9jB5pPpCZqwtfDbpP",
+			SecretKey: "TnyLXYTWUOBoLm6OXXN7bxCHF7whLuNk",
+		},
+	})
 }

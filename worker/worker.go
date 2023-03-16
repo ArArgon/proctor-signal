@@ -2,13 +2,16 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/criyle/go-judge/envexec"
+	"github.com/tencentyun/cos-go-sdk-v5"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"proctor-signal/config"
@@ -29,6 +32,7 @@ type Worker struct {
 	judge      *judge.Manager
 	resManager *resource.Manager
 	backend    backend.BackendServiceClient
+	cosCli     *cos.Client
 	conf       *config.Config
 }
 
@@ -36,13 +40,18 @@ const maxTimeout = time.Minute * 10
 const backoffInterval = time.Millisecond * 500
 
 func NewWorker(
-	judgeManager *judge.Manager, resManager *resource.Manager, backendCli backend.BackendServiceClient, conf *config.Config,
+	judgeManager *judge.Manager,
+	resManager *resource.Manager,
+	backendCli backend.BackendServiceClient,
+	cosCli *cos.Client,
+	conf *config.Config,
 ) *Worker {
 	return &Worker{
 		wg:         new(sync.WaitGroup),
 		judge:      judgeManager,
 		resManager: resManager,
 		backend:    backendCli,
+		cosCli:     cosCli,
 		conf:       conf,
 	}
 }
@@ -124,7 +133,6 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 
 	outputFileCaches := make([]*os.File, 0)
 	defer w.removeOutputFiles(sugar, outputFileCaches)
-	// TODO: upload output files to OSS before it was deleted
 
 	// Compile source code.
 	artifactIDs, abort, err := w.compile(ctx, sugar, sub, result, outputFileCaches)
@@ -298,6 +306,14 @@ func (w *Worker) judgeOnDAG(
 				}
 			}
 
+			caseResult.OutputKey, err = w.uploadToOSS(ctx, judgeRes.Stdout)
+			if err != nil {
+				sugar.Errorf("failed to upload judge output to COS, err: %v", err)
+				caseResult.Conclusion = model.Conclusion_InternalError
+				return false
+			}
+			caseResult.OutputSize = uint64(judgeRes.StdoutSize)
+
 			subResult.TotalTime += caseResult.TotalTime
 			if subResult.TotalSpace < caseResult.TotalSpace {
 				subResult.TotalSpace = caseResult.TotalSpace
@@ -400,6 +416,17 @@ func truncateStderr(stderr *os.File, buffLen int64) string {
 	}
 
 	return res
+}
+
+func (w *Worker) uploadToOSS(ctx context.Context, f *os.File) (string, error) {
+	_, filename := filepath.Split(f.Name())
+	now := time.Now()
+	key := fmt.Sprintf("OUTPUT_DATA/%d-%d-%d-%s", now.Year(), int(now.Month()), now.Day(), filename)
+	_, err := w.cosCli.Object.Put(ctx, key, f, nil)
+	if err != nil {
+		return "", err
+	}
+	return key, nil
 }
 
 func (w *Worker) removeOutputFiles(sugar *zap.SugaredLogger, outputFileCaches []*os.File) {
