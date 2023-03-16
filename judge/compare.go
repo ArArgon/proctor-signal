@@ -2,9 +2,12 @@ package judge
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/md5"
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"math"
 	"reflect"
@@ -12,6 +15,8 @@ import (
 )
 
 type compareFunc func(expected, actual []byte) (bool, error)
+
+const newline = '\n'
 
 func getMd5() compareFunc {
 	expectedHash := md5.New()
@@ -29,54 +34,31 @@ func getMd5() compareFunc {
 
 // Compare funcs compare actual content to expected content, return the result whether they are equal.
 // It should just be called by func Judge.
+func compareAll(expected, actual io.Reader, buffLen int) (bool, error) {
+	expectHash := sha256.New()
+	actualHash := sha256.New()
 
-func compareAll(expected, actual io.Reader, buffLen int, fn compareFunc) (bool, error) {
-	expectedOutputBuff := make([]byte, buffLen)
-	actualOutputBuff := make([]byte, buffLen)
+	expectReader := bufio.NewReaderSize(expected, buffLen)
+	actualReader := bufio.NewReaderSize(actual, buffLen)
 
-	var expectedLen, actualLen int
-	var err error
-	// if hashFunc == nil {
-	// 	hashFunc = noHash
-	// }
-
-	for {
-		expectedLen, err = io.ReadFull(expected, expectedOutputBuff)
-		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-			return false, err
-		}
-
-		actualLen, err = io.ReadFull(actual, actualOutputBuff)
-		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-			return false, err
-		}
-
-		if expectedLen != actualLen {
-			return false, nil
-		} else {
-			ok, err := fn(expectedOutputBuff[:expectedLen], actualOutputBuff[:actualLen])
-			if err != nil {
-				return false, err
-			}
-			if !ok {
-				return false, nil
-			}
-		}
-
-		if expectedLen < buffLen {
-			break
-		}
+	expectLen, err := expectReader.WriteTo(expectHash)
+	if err != nil {
+		return false, nil
 	}
-	return true, nil
+
+	actualLen, err := actualReader.WriteTo(actualHash)
+	if err != nil {
+		return false, nil
+	}
+
+	return (expectLen == actualLen) && bytes.Equal(expectHash.Sum(nil), actualHash.Sum(nil)), nil
 }
 
 func compareLines(expected, actual io.Reader, ignoreNewline bool, fn compareFunc) (bool, error) {
+	//return compareLines2(expected, actual, ignoreNewline)
 	expectedOutputScanner := bufio.NewScanner(expected)
 	actualOutputReader := bufio.NewReader(actual)
 	expectedOutputScanner.Scan()
-	// if hashFunc == nil {
-	// 	hashFunc = noHash
-	// }
 
 	for {
 		// expectedBuffScanner will ignore '\n'
@@ -124,12 +106,90 @@ func compareLines(expected, actual io.Reader, ignoreNewline bool, fn compareFunc
 	}
 }
 
+func iterHash(r *bufio.Reader, h hash.Hash, ignoreNewline bool) error {
+	b, err := r.ReadBytes(newline)
+	if err != nil && err != io.EOF {
+		return err
+	}
+
+	var (
+		hashErr error
+		trim    = filter(b)
+	)
+
+	if _, hashErr = h.Write(trim); hashErr != nil {
+		return hashErr
+	}
+
+	if ignoreNewline || len(b) == len(trim) || (len(b) > 0 && b[len(b)-1] != '\n') {
+		return err
+	}
+	if _, hashErr = h.Write([]byte{newline}); hashErr != nil {
+		return hashErr
+	}
+	return err
+}
+
+func compareLines2(expected, actual io.Reader, ignoreNewline bool) (bool, error) {
+
+	var (
+		expectHash   = md5.New()
+		actualHash   = md5.New()
+		expectReader = bufio.NewReader(expected)
+		actualReader = bufio.NewReader(actual)
+		finExpect    bool
+		finActual    bool
+	)
+
+	// Synchronized comparison.
+	for {
+		if err := iterHash(expectReader, expectHash, ignoreNewline); err != nil {
+			finExpect = true
+			if err != io.EOF {
+				return false, err
+			}
+			break
+		}
+		if err := iterHash(actualReader, actualHash, ignoreNewline); err != nil {
+			finActual = true
+			if err != io.EOF {
+				return false, err
+			}
+			break
+		}
+
+		if !bytes.Equal(expectHash.Sum(nil), actualHash.Sum(nil)) {
+			return false, nil
+		}
+	}
+
+	for !finExpect {
+		if err := iterHash(expectReader, expectHash, ignoreNewline); err != nil {
+			if err != io.EOF {
+				return false, err
+			}
+			break
+		}
+	}
+
+	for !finActual {
+		if err := iterHash(actualReader, actualHash, ignoreNewline); err != nil {
+			if err != io.EOF {
+				return false, err
+			}
+			break
+		}
+	}
+
+	return bytes.Equal(expectHash.Sum(nil), actualHash.Sum(nil)), nil
+}
+
 func filter(data []byte) []byte {
 	l := len(data)
-	if data[l-1] == '\n' {
+	if l > 0 && data[l-1] == '\n' {
 		l--
 	}
-	if data[l-1] == '\r' {
+	if l > 0 && data[l-1] == '\r' {
 		l--
 	}
 	return data[:l]

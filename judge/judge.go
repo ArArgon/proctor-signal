@@ -318,7 +318,7 @@ func (m *Manager) Judge(
 	case model.DiffPolicy_LINE:
 		ok, err = compareLines(testcaseOutputReader, executeRes.Stdout, p.IgnoreNewline, getMd5())
 	default:
-		ok, err = compareAll(testcaseOutputReader, executeRes.Stdout, 1024, getMd5())
+		ok, err = compareAll(testcaseOutputReader, executeRes.Stdout, 1024)
 	}
 
 	if err != nil {

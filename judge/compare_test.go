@@ -3,15 +3,16 @@ package judge
 import (
 	"bytes"
 	"io"
+	"math/rand"
+	"regexp"
+	"strconv"
 	"testing"
 
+	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
-)
 
-// var hashFuncs = map[string]func(data []byte) ([]byte, error){
-// 	"noHash": noHash,
-// 	"md5":    nil,
-// }
+	"proctor-signal/utils"
+)
 
 func reseek(t *testing.T, seekers ...io.Seeker) {
 	for _, seeker := range seekers {
@@ -25,12 +26,12 @@ func TestCompareAll(t *testing.T) {
 	correct := bytes.NewReader([]byte("12345\n67890\nabcdefg\nhijklmn\nopqrst\nuvwxyz\n"))
 	wrong := bytes.NewReader([]byte("12345\n67890\nabcdefg\nhijklmn\nopqrst\nuvwxyz"))
 
-	ok, err := compareAll(expected, correct, 16, getMd5())
+	ok, err := compareAll(expected, correct, 16)
 	assert.NoError(t, err)
 	assert.True(t, ok)
 	reseek(t, expected, correct)
 
-	ok, err = compareAll(expected, wrong, 16, getMd5())
+	ok, err = compareAll(expected, wrong, 16)
 	assert.NoError(t, err)
 	assert.False(t, ok)
 	reseek(t, expected, wrong)
@@ -64,42 +65,180 @@ func TestCompareLines(t *testing.T) {
 	actualWithDifferentEnter := bytes.NewReader([]byte("12345\n67890\r\nabcdefg\nhijklmn\r\nopq rst\nuvw xyz\r\n"))
 
 	for name, expected := range expectedTestcases {
-		t.Run(name, func(t *testing.T) {
-			ignoreNewline := true
-			t.Run("ignoreNewline", func(t *testing.T) {
-				ok, err := compareLines(expected, actualWithoutNewline, ignoreNewline, getMd5())
-				assert.NoError(t, err)
-				assert.True(t, ok)
-				reseek(t, expected, actualWithoutNewline)
+		t.Run(name+"-ignoreNewline", func(t *testing.T) {
+			ok, err := compareLines(expected, actualWithoutNewline, true, getMd5())
+			assert.NoError(t, err)
+			assert.True(t, ok)
+			reseek(t, expected, actualWithoutNewline)
 
-				ok, err = compareLines(expected, actualWithNewline, ignoreNewline, getMd5())
-				assert.NoError(t, err)
-				assert.True(t, ok)
-				reseek(t, expected, actualWithNewline)
+			ok, err = compareLines(expected, actualWithNewline, true, getMd5())
+			assert.NoError(t, err)
+			assert.True(t, ok)
+			reseek(t, expected, actualWithNewline)
 
-				ok, err = compareLines(expected, actualWithDifferentEnter, ignoreNewline, getMd5())
-				assert.NoError(t, err)
-				assert.True(t, ok)
-				reseek(t, expected, actualWithDifferentEnter)
-			})
+			ok, err = compareLines(expected, actualWithDifferentEnter, true, getMd5())
+			assert.NoError(t, err)
+			assert.True(t, ok)
+			reseek(t, expected, actualWithDifferentEnter)
+		})
 
-			ignoreNewline = false
-			t.Run("notIgnoreNewline", func(t *testing.T) {
-				ok, err := compareLines(expected, actualWithoutNewline, ignoreNewline, getMd5())
-				assert.NoError(t, err)
-				assert.True(t, ok)
-				reseek(t, expected, actualWithoutNewline)
+		t.Run(name+"-notIgnoreNewline", func(t *testing.T) {
+			ok, err := compareLines(expected, actualWithoutNewline, false, getMd5())
+			assert.NoError(t, err)
+			assert.True(t, ok)
+			reseek(t, expected, actualWithoutNewline)
 
-				ok, err = compareLines(expected, actualWithNewline, ignoreNewline, getMd5())
-				assert.NoError(t, err)
-				assert.False(t, ok)
-				reseek(t, expected, actualWithNewline)
+			ok, err = compareLines(expected, actualWithNewline, false, getMd5())
+			assert.NoError(t, err)
+			assert.False(t, ok)
+			reseek(t, expected, actualWithNewline)
 
-				ok, err = compareLines(expected, actualWithDifferentEnter, ignoreNewline, getMd5())
-				assert.NoError(t, err)
-				assert.False(t, ok)
-				reseek(t, expected, actualWithDifferentEnter)
-			})
+			ok, err = compareLines(expected, actualWithDifferentEnter, false, getMd5())
+			assert.NoError(t, err)
+			assert.False(t, ok)
+			reseek(t, expected, actualWithDifferentEnter)
 		})
 	}
+}
+
+func TestCompareLinesNew(t *testing.T) {
+	var testcases []string
+
+	genCase := func() string {
+		lines := lo.Clamp(rand.Intn(2048), 10, 2048)
+		var res string
+
+		// No newline in the end.
+		res = lo.RandomString(rand.Intn(1024), []rune(utils.AlphaNumericTable))
+		for i := 1; i < lines; i++ {
+			lr := (rand.Int() % 2) == 0
+			res += lo.Ternary(lr, "\r\n", "\n") +
+				lo.RandomString(lo.Clamp(rand.Intn(1024), 1, 1024), []rune(utils.AlphaNumericTable))
+		}
+
+		return res
+	}
+
+	for i := 0; i < 25; i++ {
+		testcases = append(testcases, genCase())
+	}
+
+	for idx, text := range testcases {
+		label := strconv.Itoa(idx)
+		newLine := text + "\n"
+		newLineLR := text + "\r\n"
+
+		if regexp.MustCompile(`(\r[^\n])|(\r$)`).MatchString(text) {
+			t.Skip(text)
+			return
+		}
+
+		t.Run("vanilla#"+label, func(t *testing.T) {
+			ok, err := compareLines(bytes.NewReader([]byte(text)), bytes.NewReader([]byte(text)), true, getMd5())
+			assert.NoError(t, err)
+			assert.True(t, ok)
+			ok, err = compareLines(bytes.NewReader([]byte(text)), bytes.NewReader([]byte(text)), false, getMd5())
+			assert.NoError(t, err)
+			assert.True(t, ok)
+		})
+
+		// ignoreNewline
+		t.Run("ignore-newline#"+label, func(t *testing.T) {
+			ok, err := compareLines(bytes.NewReader([]byte(text)), bytes.NewReader([]byte(newLine)), true, getMd5())
+			assert.NoError(t, err)
+			assert.True(t, ok, "text: %x, newline: %x", text, newLine)
+		})
+		t.Run("ignore-newline-lr#"+label, func(t *testing.T) {
+			ok, err := compareLines(bytes.NewReader([]byte(text)), bytes.NewReader([]byte(newLineLR)), true, getMd5())
+			assert.NoError(t, err)
+			assert.True(t, ok, "text: %x, newlineLR: %x", text, newLineLR)
+		})
+
+		// notIgnoreNewline
+		t.Run("not-ignore-newline#"+label, func(t *testing.T) {
+			ok, err := compareLines(bytes.NewReader([]byte(text)), bytes.NewReader([]byte(newLine)), false, getMd5())
+			assert.NoError(t, err)
+			assert.Falsef(t, ok, "text: %x, newline: %x", text, newLine)
+		})
+		t.Run("not-ignore-newline-lr#"+label, func(t *testing.T) {
+			ok, err := compareLines(bytes.NewReader([]byte(text)), bytes.NewReader([]byte(newLineLR)), false, getMd5())
+			assert.NoError(t, err)
+			assert.Falsef(t, ok, "text: %x, newlineLR: %x", text, newLineLR)
+		})
+	}
+
+}
+
+func FuzzCompareLines2(f *testing.F) {
+	var s1, s2, s3 string
+	for i := 0; i < 1024; i++ {
+		s1 += "aa\n"
+		s2 += "aa\r\n"
+		s3 += "\n"
+	}
+	f.Add(s1)
+	f.Add(s1 + "\n")
+	f.Add(s2)
+	f.Add(s2 + "\r\n")
+	f.Add(s3)
+
+	f.Add("")
+	f.Add("\n\n\n\n")
+	f.Add("\r\n\r\n\r\n")
+	f.Add("\n")
+	f.Add("\r\n")
+	f.Add(" ")
+
+	f.Fuzz(func(t *testing.T, text string) {
+		newLine := text + "\n"
+		newLineLR := text + "\r\n"
+
+		if regexp.MustCompile(`(\r[^\n])|(\r$)`).MatchString(text) {
+			t.Skip(text)
+			return
+		}
+
+		t.Run("vanilla", func(t *testing.T) {
+			ok, err := compareLines2(bytes.NewReader([]byte(text)), bytes.NewReader([]byte(text)), true)
+			assert.NoError(t, err)
+			assert.True(t, ok)
+			ok, err = compareLines2(bytes.NewReader([]byte(text)), bytes.NewReader([]byte(text)), false)
+			assert.NoError(t, err)
+			assert.True(t, ok)
+		})
+
+		// ignoreNewline
+		t.Run("ignore-newline", func(t *testing.T) {
+			ok, err := compareLines2(bytes.NewReader([]byte(text)), bytes.NewReader([]byte(newLine)), true)
+			assert.NoError(t, err)
+			assert.True(t, ok, "text: %x, newline: %x", text, newLine)
+		})
+		t.Run("ignore-newline-lr", func(t *testing.T) {
+			ok, err := compareLines2(bytes.NewReader([]byte(text)), bytes.NewReader([]byte(newLineLR)), true)
+			assert.NoError(t, err)
+			assert.True(t, ok, "text: %x, newlineLR: %x", text, newLineLR)
+		})
+
+		// notIgnoreNewline
+		t.Run("not-ignore-newline", func(t *testing.T) {
+			ok, err := compareLines2(bytes.NewReader([]byte(text)), bytes.NewReader([]byte(newLine)), false)
+			assert.NoError(t, err)
+			assert.Falsef(t, ok, "text: %x, newline: %x", text, newLine)
+		})
+		t.Run("not-ignore-newline-rev", func(t *testing.T) {
+			ok, err := compareLines2(bytes.NewReader([]byte(newLine)), bytes.NewReader([]byte(text)), false)
+			assert.NoError(t, err)
+			assert.Falsef(t, ok, "text: %x, expect: %x", newLine, text)
+		})
+		t.Run("not-ignore-newline-lr", func(t *testing.T) {
+			ok, err := compareLines2(bytes.NewReader([]byte(text)), bytes.NewReader([]byte(newLineLR)), false)
+			assert.NoError(t, err)
+			assert.Falsef(t, ok, "text: %x, newlineLR: %x", text, newLineLR)
+		})
+		t.Run("not-ignore-newline-lr-rev", func(t *testing.T) {
+			ok, err := compareLines2(bytes.NewReader([]byte(newLineLR)), bytes.NewReader([]byte(text)), false)
+			assert.NoError(t, err)
+			assert.Falsef(t, ok, "text: %x, expect: %x", newLineLR, text)
+		})
+	})
 }
