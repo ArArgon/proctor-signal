@@ -98,10 +98,12 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 	// Fetch judge task.
 	sub, abort, err := w.fetch(ctx, sugar)
 	if abort {
-		if err != nil {
+		if err != nil && sub != nil {
 			return &backend.CompleteJudgeTaskRequest{Result: &model.JudgeResult{
-				Conclusion: model.Conclusion_InternalError,
-				ErrMessage: lo.ToPtr("failed to fetch: " + err.Error()),
+				SubmissionId: sub.Id,
+				ProblemId:    sub.ProblemId,
+				Conclusion:   model.Conclusion_InternalError,
+				ErrMessage:   lo.ToPtr("failed to fetch: " + err.Error()),
 			}}, err
 		}
 		return nil, err
@@ -109,6 +111,7 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 
 	result := &model.JudgeResult{
 		SubmissionId: sub.Id,
+		ProblemId:    sub.ProblemId,
 		ReceiveTime:  timestamppb.Now(),
 	}
 	sugar = sugar.With(
@@ -211,7 +214,7 @@ func (w *Worker) compile(
 
 	if err != nil {
 		// Internal error.
-		sugar.Error("an internal error occurred during compilation: %+v", err)
+		sugar.Errorf("an internal error occurred during compilation: %+v", err)
 		if compileRes != nil {
 			w.judge.RemoveFiles(compileRes.ArtifactFileIDs)
 		}
@@ -292,6 +295,7 @@ func (w *Worker) judgeOnDAG(
 
 			caseResult.Conclusion = judgeRes.Conclusion
 			caseResult.DiffPolicy = p.DiffPolicy
+			caseResult.FinishedAt = timestamppb.Now()
 			caseResult.TotalTime = uint32(judgeRes.TotalTime.Milliseconds())
 			caseResult.TotalSpace = float32(judgeRes.TotalSpace.KiB()) / 1024
 			caseResult.ReturnValue = int32(judgeRes.ExitStatus)

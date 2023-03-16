@@ -1,13 +1,11 @@
 package gojudge
 
 import (
-	"fmt"
 	"log"
 	"runtime"
 	"runtime/debug"
 	"time"
 
-	"github.com/criyle/go-judge/cmd/executorserver/version"
 	"github.com/criyle/go-judge/env"
 	"github.com/criyle/go-judge/env/pool"
 	"github.com/criyle/go-judge/envexec"
@@ -20,44 +18,27 @@ import (
 
 var logger *zap.Logger
 
-func Init(l *zap.Logger, conf *config.JudgeConfig) {
+func NewGoJudge(logger *zap.Logger, conf *config.JudgeConfig, fs filestore.FileStore) worker.Worker {
+	Init(logger)
+	b := NewEnvBuilder(conf)
+	envPool := NewEnvPool(b, false)
+	Prefork(envPool, conf.PreFork)
+	work := NewWorker(conf, envPool, fs)
+
+	// background force GC worker
+	NewForceGCWorker(conf)
+	return work
+}
+
+func Init(l *zap.Logger) {
 	logger = l
-	if conf.Version {
-		fmt.Print(version.Version)
-		return
-	}
-	warnIfNotLinux()
-}
-
-func warnIfNotLinux() {
 	if runtime.GOOS != "linux" {
-		logger.Sugar().Warn("Platform is ", runtime.GOOS)
-		logger.Sugar().Warn("Please notice that the primary supporting platform is Linux")
-		logger.Sugar().Warn("Windows and macOS(darwin) support are only recommended in development environment")
+		sugar := l.Sugar()
+		sugar.Warn("Platform is ", runtime.GOOS)
+		sugar.Warn("Please notice that the primary supporting platform is Linux")
+		sugar.Warn("Windows and macOS(darwin) support are only recommended in development environment")
 	}
 }
-
-// func initLogger(conf *config.Config) {
-// 	if conf.Silent {
-// 		logger = zap.NewNop()
-// 		return
-// 	}
-
-// 	var err error
-// 	if conf.Release {
-// 		logger, err = zap.NewProduction()
-// 	} else {
-// 		config := zap.NewDevelopmentConfig()
-// 		config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-// 		if !conf.EnableDebug {
-// 			config.Level.SetLevel(zap.InfoLevel)
-// 		}
-// 		logger, err = config.Build()
-// 	}
-// 	if err != nil {
-// 		log.Fatalln("init logger failed ", err)
-// 	}
-// }
 
 func Prefork(envPool worker.EnvironmentPool, prefork int) {
 	if prefork <= 0 {
@@ -138,9 +119,4 @@ func NewForceGCWorker(conf *config.JudgeConfig) {
 			<-ticker.C
 		}
 	}()
-}
-
-func CleanUpWorker(work worker.Worker) {
-	work.Shutdown()
-	logger.Sugar().Info("Worker shutdown")
 }

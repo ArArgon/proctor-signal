@@ -51,6 +51,13 @@ func TestLanguageConfig(t *testing.T) {
 				"java8":  "--source 8",
 			},
 		},
+		"python": config.LanguageConfEntity{
+			SourceName:     "source.py",
+			NoCompilation:  true,
+			Compiler:       "/usr/bin/python3",
+			ExecuteCmd:     "${Compiler} $SourceName",
+			ResourceFactor: 2,
+		},
 	}
 
 	confs, err := newLanguageConfigs(rawConfs, []string{"PATH=/usr/bin:/bin", "MyEnv='a'"})
@@ -101,5 +108,12 @@ func TestLanguageConfig(t *testing.T) {
 			},
 			conf.getEnvs(),
 		))
+	})
+
+	t.Run("python", func(t *testing.T) {
+		conf := confs["python"]
+		assert.False(t, conf.needCompilation)
+		assert.Equal(t, []string{}, lo.Must(conf.evalCompileCmd(&model.Submission{})))
+		assert.Equal(t, []string{"/usr/bin/python3", "source.py"}, conf.getRunCmd())
 	})
 }

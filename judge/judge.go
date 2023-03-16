@@ -2,12 +2,12 @@ package judge
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.uber.org/zap"
 
@@ -89,6 +89,32 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 		return nil, fmt.Errorf("compile config for %s not found", sub.Language)
 	}
 
+	if !compileConf.needCompile() {
+		// New file in fileStore.
+		srcFile, err := m.fs.New()
+		if err != nil {
+			return nil, err
+		}
+
+		// Write source code into it.
+		_, err = srcFile.Write(sub.SourceCode)
+		if err != nil {
+			return nil, err
+		}
+
+		// Add this file to fileStore with name `compileConf.getSourceName()`.
+		srcId, err := m.fs.Add(compileConf.getSourceName(), srcFile.Name())
+		if err != nil {
+			return nil, err
+		}
+
+		// Compose result with source code as an artifact.
+		return &CompileRes{
+			ExecuteRes:      ExecuteRes{Status: envexec.StatusAccepted},
+			ArtifactFileIDs: map[string]string{compileConf.getSourceName(): srcId},
+		}, nil
+	}
+
 	args, err := compileConf.evalCompileCmd(sub)
 	if err != nil {
 		return nil, fmt.Errorf("failed to compose compilation Cmd, err: %+v", err)
@@ -135,20 +161,25 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 	}
 
 	// read compile output
-	var f *os.File
-	f, ok = result.Files["stdout"]
-	if ok {
+	var (
+		f    *os.File
+		size int64
+	)
+	if f, ok = result.Files["stdout"]; ok {
+		size, err = reseekAndGetSize(f)
+		if err != nil {
+			return compileRes, err
+		}
 		compileRes.Stdout = f
-		if _, err = f.Seek(0, 0); err != nil {
-			return compileRes, errors.New("failed to reseek compile stdout")
-		}
+		compileRes.StdoutSize = size
 	}
-	f, ok = result.Files["stderr"]
-	if ok {
-		compileRes.Stderr = f
-		if _, err = f.Seek(0, 0); err != nil {
-			return compileRes, errors.New("failed to reseek compile stderr")
+	if f, ok = result.Files["stderr"]; ok {
+		size, err = reseekAndGetSize(f)
+		if err != nil {
+			return compileRes, err
 		}
+		compileRes.Stderr = f
+		compileRes.StderrSize = size
 	}
 
 	// cache files
@@ -161,7 +192,8 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 }
 
 // Execute executes cmd with stdin and copyIn files.
-func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile, copyInFileIDs map[string]string, CPULimit time.Duration, memoryLimit runner.Size) (*ExecuteRes, error) {
+func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
+	copyInFileIDs map[string]string, CPULimit time.Duration, memoryLimit runner.Size) (*ExecuteRes, error) {
 	workerCmd := worker.Cmd{
 		Env:         []string{"PATH=/usr/bin:/bin"},
 		Args:        strings.Split(cmd, " "),
@@ -199,34 +231,36 @@ func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
 	}
 
 	// read execute output
-	var err error
 	if f, ok := result.Files["stdout"]; ok {
-		if _, err = f.Seek(0, 0); err != nil {
-			return executeRes, errors.New("failed to reseek execute stdout")
+		size, err := reseekAndGetSize(f)
+		if err != nil {
+			return executeRes, err
 		}
 		executeRes.Stdout = f
-
-		fi, err := f.Stat()
-		if err != nil {
-			return executeRes, errors.New("failed to read execute stdout info")
-		}
-		executeRes.StdoutSize = fi.Size()
+		executeRes.StdoutSize = size
 	}
 
 	if f, ok := result.Files["stderr"]; ok {
-		if _, err = f.Seek(0, 0); err != nil {
-			return executeRes, errors.New("failed to reseek execute stderr")
+		size, err := reseekAndGetSize(f)
+		if err != nil {
+			return executeRes, err
 		}
 		executeRes.Stderr = f
-
-		fi, err := f.Stat()
-		if err != nil {
-			return executeRes, errors.New("failed to read execute stderr info")
-		}
-		executeRes.StderrSize = fi.Size()
+		executeRes.StderrSize = size
 	}
 
 	return executeRes, nil
+}
+
+func reseekAndGetSize(f *os.File) (int64, error) {
+	if _, err := f.Seek(0, 0); err != nil {
+		return 0, errors.Errorf("failed to re-seek file %s", f.Name())
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		return 0, errors.Errorf("failed to read stat of %s", f.Name())
+	}
+	return fi.Size(), nil
 }
 
 func fsKey(p *model.Problem, key string) string {

@@ -42,7 +42,7 @@ func TestMain(m *testing.M) {
 	logger := lo.Must(zapConfig.Build())
 
 	conf := loadConf()
-	gojudge.Init(logger, conf)
+	gojudge.Init(logger)
 
 	// Prepare tmp dir.
 	loc, err := os.MkdirTemp(os.TempDir(), "signal")
@@ -263,4 +263,20 @@ func TestCompileMultiOptions(t *testing.T) {
 	}
 
 	assert.Equal(t, "8888889885\n", string(bytes), fmt.Sprintf("executeRes: %+v", executeRes))
+}
+
+func TestNoCompilation(t *testing.T) {
+	language := "python"
+	conf := languageConfig[language]
+	ctx := context.Background()
+
+	codes, err := os.ReadFile("tests/source.py")
+	assert.NoError(t, err)
+
+	sub := &model.Submission{Language: language, SourceCode: codes}
+	compileRes, err := judgeManger.Compile(ctx, sub)
+	assert.NoError(t, err)
+	assert.NotNil(t, compileRes)
+	assert.True(t, compileRes.ArtifactFileIDs[conf.SourceName] != "")
+	assert.Equal(t, compileRes.Status, envexec.StatusAccepted)
 }

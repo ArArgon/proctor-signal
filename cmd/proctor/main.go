@@ -7,13 +7,16 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/criyle/go-judge/filestore"
+	"github.com/criyle/go-judge/worker"
 	"github.com/samber/lo"
 	"github.com/tencentyun/cos-go-sdk-v5"
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -25,48 +28,34 @@ import (
 	judgeworker "proctor-signal/worker"
 )
 
-var logger *zap.Logger
-
 func main() {
-	conf := lo.Must(config.LoadConf("conf/signal.toml", "conf/language.toml"))
-	initLogger(conf)
+	conf := lo.Must(config.LoadConf("conf"))
+	logger := initLogger(conf)
+	defer func() { _ = logger.Sync() }()
+
 	sugar := logger.Sugar()
+	sugar.Debugf("conf: %+v", conf)
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	logger.Info("connecting to the backend...")
-	var backendCli backend.Client
-	err := backoff.Retry(func() error {
-		var err error
-		backendCli, err = backend.NewBackendClient(ctx, logger, conf, cancel)
-		return err
-	}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 8))
+	backendCli, err := connectBackend(ctx, logger, conf, cancel)
 	if err != nil {
 		logger.Sugar().Fatalf("failed to connect to the backend after retries, %+v", err)
 	}
 	logger.Info("Successfully connected to the backend")
 
-	defer func() { _ = logger.Sync() }()
-
-	sugar.Debugf("conf: %+v", conf)
-
-	// Init judge
-	//judge.LoadLanguageConfig("language.yaml")
-
-	// Init gojudge
+	// Init FileStore
 	judgeConf := conf.GoJudgeConf
-	gojudge.Init(logger, judgeConf)
-	fs, fsCleanUp := newFileStore(judgeConf)
-	b := gojudge.NewEnvBuilder(judgeConf)
-	envPool := gojudge.NewEnvPool(b, false)
-	gojudge.Prefork(envPool, judgeConf.PreFork)
-	work := gojudge.NewWorker(judgeConf, envPool, fs)
+	fs, fsCleanUp := newFileStore(logger, judgeConf)
+
+	// Init go-judge.
+	work := gojudge.NewGoJudge(logger, judgeConf, fs)
 	work.Start()
 	logger.Sugar().Infof("Started worker, concurrency=%d, workdir=%s, timeLimitCheckInterval=%v",
 		judgeConf.Parallelism, judgeConf.Dir, judgeConf.TimeLimitCheckerInterval)
 
-	// background force GC worker
-	gojudge.NewForceGCWorker(judgeConf)
-
+	// Init executor.
 	resManager := resource.NewResourceManager(logger, backendCli, fs.(*resource.FileStore))
 	judgeManager := lo.Must(judge.NewJudgeManager(work, conf, fs.(*resource.FileStore), logger))
 	cosClient := newCOSClient()
@@ -86,45 +75,65 @@ func main() {
 	sugar.Info("Shutting Down...")
 	cancel()
 
-	ctx, cancel = context.WithTimeout(context.TODO(), time.Second*3)
+	shutdown(sugar, backendCli, work, fsCleanUp)
+}
+
+func shutdown(sugar *zap.SugaredLogger, cli backend.Client, work worker.Worker, fsCleanUp func() error) {
+	ctx, cancel := context.WithTimeout(context.TODO(), time.Second*3)
 	defer cancel()
 
-	if err = backendCli.ReportExit(ctx, "exiting"); err != nil {
+	var err error
+	if err = cli.ReportExit(ctx, "exiting"); err != nil {
 		sugar.Warnf("failed to exit gracefully, %+v", err)
 	}
 	sugar.Info("disconnected from the backend")
-	gojudge.CleanUpWorker(work)
-	err = fsCleanUp()
+
+	work.Shutdown()
+	err = multierr.Append(err, fsCleanUp())
 
 	go func() {
-		logger.Sugar().Info("Shutdown Finished, ", err)
+		sugar.Info("Shutdown Finished, ", err)
 		cancel()
 	}()
 	<-ctx.Done()
 }
 
-func initLogger(conf *config.Config) {
+func connectBackend(
+	ctx context.Context, logger *zap.Logger, conf *config.Config, cancel context.CancelFunc,
+) (cli backend.Client, err error) {
+	err = backoff.Retry(func() error {
+		var err error
+		cli, err = backend.NewBackendClient(ctx, logger, conf, cancel)
+		return err
+	}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 8))
+	return
+}
+
+func initLogger(conf *config.Config) (logger *zap.Logger) {
 	if conf.Silent {
-		logger = zap.NewNop()
-		return
+		return zap.NewNop()
+	}
+
+	zapConfig := zap.NewDevelopmentConfig()
+	switch strings.ToLower(conf.Level) {
+	case "production", "prod":
+		zapConfig = zap.NewProductionConfig()
+	case "development", "dev":
+		zapConfig.Level.SetLevel(zap.InfoLevel)
+		fallthrough
+	case "debug":
+		zapConfig.DisableStacktrace = true
+		zapConfig.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 	}
 
 	var err error
-	if conf.Level == "production" {
-		logger, err = zap.NewProduction()
-	} else {
-		zapConfig := zap.NewDevelopmentConfig()
-		zapConfig.DisableStacktrace = true
-		zapConfig.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-		zapConfig.Level.SetLevel(lo.Ternary(conf.Level == "debug", zap.DebugLevel, zap.InfoLevel))
-		logger, err = zapConfig.Build()
-	}
-	if err != nil {
+	if logger, err = zapConfig.Build(); err != nil {
 		log.Fatalf("failed to initialize logger: %+v\n", err)
 	}
+	return
 }
 
-func newFileStore(conf *config.JudgeConfig) (filestore.FileStore, func() error) {
+func newFileStore(logger *zap.Logger, conf *config.JudgeConfig) (filestore.FileStore, func() error) {
 	const timeoutCheckInterval = 15 * time.Second
 	sugar := logger.Sugar()
 	var (
@@ -150,9 +159,7 @@ func newFileStore(conf *config.JudgeConfig) (filestore.FileStore, func() error) 
 	if err != nil {
 		sugar.Fatal("failed to initialize the file store")
 	}
-	//if conf.EnableDebug {
-	//	fs = newMetricsFileStore(fs)
-	//}
+
 	if conf.FileTimeout > 0 {
 		fs = filestore.NewTimeout(fs, conf.FileTimeout, timeoutCheckInterval)
 	}
