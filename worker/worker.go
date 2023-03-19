@@ -2,16 +2,13 @@ package worker
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/criyle/go-judge/envexec"
-	"github.com/tencentyun/cos-go-sdk-v5"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"proctor-signal/config"
@@ -31,8 +28,7 @@ type Worker struct {
 	wg         *sync.WaitGroup
 	judge      *judge.Manager
 	resManager *resource.Manager
-	backend    backend.BackendServiceClient
-	cosCli     *cos.Client
+	backend    backend.Client
 	conf       *config.Config
 }
 
@@ -42,8 +38,7 @@ const backoffInterval = time.Millisecond * 500
 func NewWorker(
 	judgeManager *judge.Manager,
 	resManager *resource.Manager,
-	backendCli backend.BackendServiceClient,
-	cosCli *cos.Client,
+	backendCli backend.Client,
 	conf *config.Config,
 ) *Worker {
 	return &Worker{
@@ -51,7 +46,6 @@ func NewWorker(
 		judge:      judgeManager,
 		resManager: resManager,
 		backend:    backendCli,
-		cosCli:     cosCli,
 		conf:       conf,
 	}
 }
@@ -271,6 +265,36 @@ func (w *Worker) judgeOnDAG(
 		}
 	}
 
+	// prepare for upload
+	type caseOutput struct {
+		caseResult *model.CaseResult
+		outputFile *os.File
+	}
+	caseOutputCh := make(chan *caseOutput, 32)
+	uploadFinishCh := make(chan struct{})
+
+	go func() {
+		defer close(uploadFinishCh)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case co, ok := <-caseOutputCh:
+				if !ok {
+					// upload finished
+					return
+				}
+
+				if key, err := w.backend.PutResourceStream(ctx, backend.ResourceType_OUTPUT_DATA,
+					int64(co.caseResult.OutputSize), co.outputFile); err != nil {
+					sugar.Errorf("failed to upload judge output to backend, err: %v", err)
+				} else {
+					co.caseResult.OutputKey = key
+				}
+			}
+		}
+	}()
+
 	dag.Traverse(func(subtask *model.Subtask) bool {
 		subResult := score[subtask.Id]
 		subResult.IsRun = true
@@ -310,13 +334,8 @@ func (w *Worker) judgeOnDAG(
 				}
 			}
 
-			caseResult.OutputKey, err = w.uploadToOSS(ctx, judgeRes.Stdout)
-			if err != nil {
-				sugar.Errorf("failed to upload judge output to COS, err: %v", err)
-				caseResult.Conclusion = model.Conclusion_InternalError
-				return false
-			}
 			caseResult.OutputSize = uint64(judgeRes.StdoutSize)
+			caseOutputCh <- &caseOutput{caseResult: caseResult, outputFile: judgeRes.Stdout}
 
 			subResult.TotalTime += caseResult.TotalTime
 			if subResult.TotalSpace < caseResult.TotalSpace {
@@ -344,6 +363,8 @@ func (w *Worker) judgeOnDAG(
 		return true
 	})
 
+	close(caseOutputCh)
+	<-uploadFinishCh
 	subResults = lo.Values(score)
 	return
 }
@@ -420,17 +441,6 @@ func truncateStderr(stderr *os.File, buffLen int64) string {
 	}
 
 	return res
-}
-
-func (w *Worker) uploadToOSS(ctx context.Context, f *os.File) (string, error) {
-	_, filename := filepath.Split(f.Name())
-	now := time.Now()
-	key := fmt.Sprintf("OUTPUT_DATA/%d-%d-%d-%s", now.Year(), int(now.Month()), now.Day(), filename)
-	_, err := w.cosCli.Object.Put(ctx, key, f, nil)
-	if err != nil {
-		return "", err
-	}
-	return key, nil
 }
 
 func (w *Worker) removeOutputFiles(sugar *zap.SugaredLogger, outputFileCaches []*os.File) {
