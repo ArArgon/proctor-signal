@@ -2,14 +2,12 @@ package judge
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"os"
-	"reflect"
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.uber.org/zap"
 
@@ -57,28 +55,22 @@ type ExecuteRes struct {
 	Status     envexec.Status
 	ExitStatus int
 	Error      string
-	Stdout     io.ReadSeekCloser
+	Stdout     *os.File
 	StdoutSize int64
-	Stderr     io.ReadSeekCloser
+	Stderr     *os.File
 	StderrSize int64
 	TotalTime  time.Duration
 	TotalSpace runner.Size
 }
 
 type CompileRes struct {
-	ExecuteRes
+	ExecuteRes      // ignore output size
 	ArtifactFileIDs map[string]string
 }
 
 type JudgeRes struct {
-	ExitStatus      int
-	Error           string
-	Conclusion      model.Conclusion
-	OutputID        string
-	OutputSize      int64
-	TruncatedOutput string
-	TotalTime       time.Duration
-	TotalSpace      runner.Size
+	ExecuteRes
+	Conclusion model.Conclusion
 }
 
 func (m *Manager) RemoveFiles(fileIDs map[string]string) {
@@ -169,20 +161,25 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 	}
 
 	// read compile output
-	var f *os.File
-	f, ok = result.Files["stdout"]
-	if ok {
+	var (
+		f    *os.File
+		size int64
+	)
+	if f, ok = result.Files["stdout"]; ok {
+		size, err = reseekAndGetSize(f)
+		if err != nil {
+			return compileRes, err
+		}
 		compileRes.Stdout = f
-		if _, err = f.Seek(0, 0); err != nil {
-			return compileRes, errors.New("failed to reseek compile stdout")
-		}
+		compileRes.StdoutSize = size
 	}
-	f, ok = result.Files["stderr"]
-	if ok {
-		compileRes.Stderr = f
-		if _, err = f.Seek(0, 0); err != nil {
-			return compileRes, errors.New("failed to reseek compile stderr")
+	if f, ok = result.Files["stderr"]; ok {
+		size, err = reseekAndGetSize(f)
+		if err != nil {
+			return compileRes, err
 		}
+		compileRes.Stderr = f
+		compileRes.StderrSize = size
 	}
 
 	// cache files
@@ -195,7 +192,8 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 }
 
 // Execute executes cmd with stdin and copyIn files.
-func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile, copyInFileIDs map[string]string, CPULimit time.Duration, memoryLimit runner.Size) (*ExecuteRes, error) {
+func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
+	copyInFileIDs map[string]string, CPULimit time.Duration, memoryLimit runner.Size) (*ExecuteRes, error) {
 	workerCmd := worker.Cmd{
 		Env:         []string{"PATH=/usr/bin:/bin"},
 		Args:        strings.Split(cmd, " "),
@@ -233,39 +231,41 @@ func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
 	}
 
 	// read execute output
-	var err error
 	if f, ok := result.Files["stdout"]; ok {
-		if _, err = f.Seek(0, 0); err != nil {
-			return executeRes, errors.New("failed to reseek execute stdout")
+		size, err := reseekAndGetSize(f)
+		if err != nil {
+			return executeRes, err
 		}
 		executeRes.Stdout = f
-
-		fi, err := f.Stat()
-		if err != nil {
-			return executeRes, errors.New("failed to read execute stdout info")
-		}
-		executeRes.StdoutSize = fi.Size()
+		executeRes.StdoutSize = size
 	}
 
 	if f, ok := result.Files["stderr"]; ok {
-		if _, err = f.Seek(0, 0); err != nil {
-			return executeRes, errors.New("failed to reseek execute stderr")
+		size, err := reseekAndGetSize(f)
+		if err != nil {
+			return executeRes, err
 		}
 		executeRes.Stderr = f
-
-		fi, err := f.Stat()
-		if err != nil {
-			return executeRes, errors.New("failed to read execute stderr info")
-		}
-		executeRes.StderrSize = fi.Size()
+		executeRes.StderrSize = size
 	}
 
 	return executeRes, nil
 }
 
+func reseekAndGetSize(f *os.File) (int64, error) {
+	if _, err := f.Seek(0, 0); err != nil {
+		return 0, errors.Errorf("failed to re-seek file %s", f.Name())
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		return 0, errors.Errorf("failed to read stat of %s", f.Name())
+	}
+	return fi.Size(), nil
+}
+
 func fsKey(p *model.Problem, key string) string {
 	binFileKey := key
-	if p != nil {
+	if p != nil && p.Id != "" && p.Ver != "" {
 		binFileKey = resource.ResKey(p, binFileKey)
 	}
 
@@ -273,8 +273,8 @@ func fsKey(p *model.Problem, key string) string {
 }
 
 func (m *Manager) Judge(
-	ctx context.Context, p *model.Problem, language string, copyInFileIDs map[string]string,
-	testcase *model.TestCase, CPULimit time.Duration, memoryLimit runner.Size,
+	ctx context.Context, p *model.Problem, language string,
+	copyInFileIDs map[string]string, testcase *model.TestCase,
 ) (*JudgeRes, error) {
 	conf, ok := m.lang[language]
 	if !ok {
@@ -284,24 +284,18 @@ func (m *Manager) Judge(
 	executeRes, err := m.Execute(
 		ctx, strings.Join(conf.getRunCmd(), " "),
 		&worker.CachedFile{FileID: fsKey(p, testcase.InputKey)}, copyInFileIDs,
-		CPULimit*time.Duration(conf.raw.ResourceFactor), memoryLimit*runner.Size(conf.raw.ResourceFactor),
+		time.Duration(p.DefaultTimeLimit)*time.Millisecond*time.Duration(conf.raw.ResourceFactor),
+		runner.Size(p.DefaultSpaceLimit*1024*1024)*runner.Size(conf.raw.ResourceFactor),
 	)
 	if executeRes == nil {
 		return nil, err
 	}
 
-	defer func() {
-		_ = executeRes.Stdout.Close()
-		_ = executeRes.Stderr.Close()
-	}()
-
 	judgeRes := &JudgeRes{
-		ExitStatus: executeRes.ExitStatus,
-		Error:      executeRes.Error,
-		TotalTime:  executeRes.TotalTime,
-		TotalSpace: executeRes.TotalSpace,
+		ExecuteRes: *executeRes,
 		Conclusion: model.ConvertStatusToConclusion(executeRes.Status),
 	}
+
 	if err != nil {
 		return judgeRes, err
 	}
@@ -317,7 +311,9 @@ func (m *Manager) Judge(
 		return judgeRes, err
 	}
 
-	ok, err = compare(testcaseOutputReader, executeRes.Stdout, 1024) // Only judge on executeRes.Stdout, ignore executeRes.Stderr
+	// Only judge on executeRes.Stdout, ignore executeRes.Stderr
+	ok, err = composeComparator(p)(testcaseOutputReader, executeRes.Stdout)
+
 	if err != nil {
 		judgeRes.Conclusion = model.Conclusion_InternalError
 		return judgeRes, err
@@ -330,65 +326,5 @@ func (m *Manager) Judge(
 		return judgeRes, err
 	}
 
-	// read judge output
-	buffLen := lo.Clamp(executeRes.StdoutSize, 0, int64(m.conf.JudgeOptions.MaxTruncatedOutput))
-	buff := make([]byte, buffLen)
-	judgeRes.OutputSize = executeRes.StdoutSize
-
-	if _, err = io.ReadFull(executeRes.Stdout, buff); err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-		return judgeRes, err
-	}
-	judgeRes.TruncatedOutput = string(buff)
-
-	// Cache executeRes.Stdout as judge output
-	f, ok := executeRes.Stdout.(*os.File)
-	if ok {
-		judgeRes.OutputID, err = m.fs.Add("Stdout", f.Name())
-		if err != nil {
-			return judgeRes, err
-		}
-	}
-
 	return judgeRes, nil
-}
-
-// Compare compares actual content to expected content, return the result whether they are equal.
-// It should just be called by func Judge.
-func compare(expected, actual io.Reader, buffLen int) (bool, error) {
-	expectedOutputBuff := make([]byte, buffLen)
-	actualOutputBuff := make([]byte, buffLen)
-	var expectedLen, actualLen int
-	var err error
-	for {
-		expectedLen, err = io.ReadFull(expected, expectedOutputBuff)
-		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-			return false, err
-		}
-
-		actualLen, err = io.ReadFull(actual, actualOutputBuff)
-		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-			return false, err
-		}
-
-		if actualLen == expectedLen+1 {
-			if actualOutputBuff[actualLen-1] == ' ' || actualOutputBuff[actualLen-1] == '\n' {
-				// cut off ' ' or '\n' at the end of executeOutputBuff
-				actualLen--
-			} else {
-				return false, nil
-			}
-		} else if actualLen > expectedLen+1 || actualLen < expectedLen {
-			return false, nil
-		}
-
-		if !reflect.DeepEqual(expectedOutputBuff[:expectedLen], actualOutputBuff[:actualLen]) {
-			return false, nil
-		}
-
-		if expectedLen < buffLen {
-			break
-		}
-	}
-
-	return true, nil
 }

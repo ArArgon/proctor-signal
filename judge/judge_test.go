@@ -92,15 +92,6 @@ func TestCompile(t *testing.T) {
 			sub := &model.Submission{Language: language, SourceCode: codes}
 			compileRes, err := judgeManger.Compile(ctx, sub)
 			assert.NotNil(t, compileRes)
-			defer func() {
-				if compileRes.Stdout != nil {
-					_ = compileRes.Stdout.Close()
-				}
-				if compileRes.Stderr != nil {
-					_ = compileRes.Stderr.Close()
-
-				}
-			}()
 			assert.NoError(t, err)
 
 			if compileRes.Status != envexec.StatusAccepted {
@@ -127,12 +118,10 @@ func TestExecute(t *testing.T) {
 				&worker.MemoryFile{Content: []byte(stdin)}, fileCaches[language],
 				time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit),
 			)
-			defer func() {
-				_ = executeRes.Stdout.Close()
-				_ = executeRes.Stderr.Close()
-			}()
+			assert.NotNil(t, executeRes)
 
 			assert.NoError(t, err)
+
 			if executeRes.ExitStatus != 0 {
 				t.Errorf("failed to execute: executeRes.ExitStatus != 0, executeRes: %+v", executeRes)
 			}
@@ -147,7 +136,12 @@ func TestExecute(t *testing.T) {
 }
 
 func TestJudge(t *testing.T) {
-	p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
+	p := &model.Problem{
+		DefaultTimeLimit:  uint32(time.Second),
+		DefaultSpaceLimit: 256,
+		DiffPolicy:        model.DiffPolicy_LINE,
+		IgnoreNewline:     true,
+	}
 	ctx := context.Background()
 
 	var err error
@@ -162,13 +156,15 @@ func TestJudge(t *testing.T) {
 
 	for language := range languageConfig {
 		t.Run(language, func(t *testing.T) {
-			judgeRes, err := judgeManger.Judge(
-				ctx, nil, language, fileCaches[language], testcase,
-				time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit),
-			)
+			judgeRes, err := judgeManger.Judge(ctx, p, language, fileCaches[language], testcase)
+			assert.NotNil(t, judgeRes)
 			assert.NoError(t, err)
+
 			assert.Equal(t, model.Conclusion_Accepted, judgeRes.Conclusion)
-			assert.Equal(t, "Hello,world.\n", judgeRes.TruncatedOutput)
+
+			buff, err := io.ReadAll(judgeRes.Stdout)
+			assert.NoError(t, err)
+			assert.Equal(t, "Hello,world.\n", string(buff))
 		})
 	}
 }
@@ -191,15 +187,6 @@ func TestCompileOption(t *testing.T) {
 
 				compileRes, err := judgeManger.Compile(ctx, sub)
 				assert.NotNil(t, compileRes, "")
-				defer func() {
-					if compileRes.Stdout != nil {
-						_ = compileRes.Stdout.Close()
-					}
-					if compileRes.Stderr != nil {
-						_ = compileRes.Stderr.Close()
-
-					}
-				}()
 				assert.NoError(t, err)
 
 				if compileRes.Status != envexec.StatusAccepted {
@@ -247,15 +234,6 @@ func TestCompileMultiOptions(t *testing.T) {
 	sub := &model.Submission{Language: language, SourceCode: codes, CompilerOption: `["cpp14", "o2"]`}
 	compileRes, err := judgeManger.Compile(ctx, sub)
 	assert.NotNil(t, compileRes)
-	defer func() {
-		if compileRes.Stdout != nil {
-			_ = compileRes.Stdout.Close()
-		}
-		if compileRes.Stderr != nil {
-			_ = compileRes.Stderr.Close()
-
-		}
-	}()
 	assert.NoError(t, err)
 
 	if compileRes.Status != envexec.StatusAccepted {

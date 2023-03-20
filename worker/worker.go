@@ -2,7 +2,9 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -10,13 +12,13 @@ import (
 	"github.com/criyle/go-judge/envexec"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"proctor-signal/config"
 	"proctor-signal/external/backend"
 	"proctor-signal/judge"
 	"proctor-signal/model"
 	"proctor-signal/resource"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/criyle/go-sandbox/runner"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.uber.org/multierr"
@@ -27,20 +29,25 @@ type Worker struct {
 	wg         *sync.WaitGroup
 	judge      *judge.Manager
 	resManager *resource.Manager
-	backend    backend.BackendServiceClient
+	backend    backend.Client
+	conf       *config.Config
 }
 
 const maxTimeout = time.Minute * 10
 const backoffInterval = time.Millisecond * 500
 
 func NewWorker(
-	judgeManager *judge.Manager, resManager *resource.Manager, backendCli backend.BackendServiceClient,
+	judgeManager *judge.Manager,
+	resManager *resource.Manager,
+	backendCli backend.Client,
+	conf *config.Config,
 ) *Worker {
 	return &Worker{
 		wg:         new(sync.WaitGroup),
 		judge:      judgeManager,
 		resManager: resManager,
 		backend:    backendCli,
+		conf:       conf,
 	}
 }
 
@@ -122,15 +129,18 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 	}
 	defer unlock()
 
+	outputFileCaches := make([]*os.File, 0)
+	defer w.removeOutputFiles(sugar, outputFileCaches)
+
 	// Compile source code.
-	artifactIDs, abort, err := w.compile(ctx, sugar, sub, result)
+	artifactIDs, abort, err := w.compile(ctx, sugar, sub, result, outputFileCaches)
 	if abort {
 		return &backend.CompleteJudgeTaskRequest{Result: result}, err
 	}
 	defer w.judge.RemoveFiles(artifactIDs)
 
 	// Judge on the DAG.
-	subtasks, err := w.judgeOnDAG(ctx, sugar, sub, p, artifactIDs)
+	subtasks, err := w.judgeOnDAG(ctx, sugar, sub, p, artifactIDs, outputFileCaches)
 	if err != nil {
 		// internal err.
 		internErr(result, "an internal error occurred during judgement:", err.Error())
@@ -149,7 +159,6 @@ func (w *Worker) work(ctx context.Context, sugar *zap.SugaredLogger) (*backend.C
 			result.Conclusion = s.Conclusion
 		}
 	}
-
 	return &backend.CompleteJudgeTaskRequest{Result: result}, nil
 }
 
@@ -190,20 +199,13 @@ func (w *Worker) fetch(ctx context.Context, sugar *zap.SugaredLogger,
 func (w *Worker) compile(
 	ctx context.Context, sugar *zap.SugaredLogger,
 	sub *model.Submission, result *model.JudgeResult,
+	outputFileCaches []*os.File,
 ) (artifactIDs map[string]string, abort bool, err error) {
 	compileRes, err := w.judge.Compile(ctx, sub)
-
-	defer func() {
-		if compileRes == nil {
-			return
-		}
-		if compileRes.Stdout != nil {
-			_ = compileRes.Stdout.Close()
-		}
-		if compileRes.Stderr != nil {
-			_ = compileRes.Stderr.Close()
-		}
-	}()
+	if compileRes != nil {
+		outputFileCaches = append(outputFileCaches, compileRes.Stdout, compileRes.Stderr)
+		_ = outputFileCaches // for lint
+	}
 
 	if err != nil {
 		// Internal error.
@@ -216,25 +218,40 @@ func (w *Worker) compile(
 	}
 
 	result.ErrMessage = lo.ToPtr(compileRes.Error)
-	var compilerStderr []byte
-	if compileRes.Stderr != nil {
-		compilerStderr, _ = io.ReadAll(compileRes.Stderr)
-		result.CompilerOutput = lo.ToPtr(string(compilerStderr))
+
+	if compileRes.StdoutSize != 0 && compileRes.StderrSize != 0 {
+		result.CompilerOutput = truncateOutput(compileRes.ExecuteRes, int64(w.conf.JudgeOptions.MaxTruncatedOutput))
+	} else if compileRes.StdoutSize != 0 {
+		result.CompilerOutput = lo.ToPtr(truncate(compileRes.Stdout, "",
+			lo.Clamp(compileRes.StdoutSize, 0, int64(w.conf.JudgeOptions.MaxTruncatedOutput)),
+		))
+	} else if compileRes.StderrSize != 0 {
+		result.CompilerOutput = lo.ToPtr(truncate(compileRes.Stderr, "",
+			lo.Clamp(compileRes.StderrSize, 0, int64(w.conf.JudgeOptions.MaxTruncatedOutput)),
+		))
+	} else {
+		result.CompilerOutput = lo.ToPtr(compileRes.Status.String())
 	}
 
 	if compileRes.Status != envexec.StatusAccepted {
 		// Compile error (not an internal error).
-		sugar.With("exit_status", compileRes.Status.String()).Debug("failed to compile, stderr: %s", compilerStderr)
+		sugar.With("exit_status", compileRes.Status.String()).
+			Debug("failed to compile, stderr: %s", result.CompilerOutput)
 		result.Conclusion = model.Conclusion_CompilationError
 		return nil, true, nil
 	}
 	return compileRes.ArtifactFileIDs, false, nil
 }
 
+type caseOutput struct {
+	caseResult *model.CaseResult
+	outputFile *os.File
+}
+
 func (w *Worker) judgeOnDAG(
 	ctx context.Context, sugar *zap.SugaredLogger,
 	sub *model.Submission, p *model.Problem,
-	artifactIDs map[string]string,
+	artifactIDs map[string]string, outputFileCaches []*os.File,
 ) (subResults []*model.SubtaskResult, err error) {
 	// Compose the DAG.
 	dag := model.NewSubtaskGraph(p)
@@ -250,6 +267,12 @@ func (w *Worker) judgeOnDAG(
 		}
 	}
 
+	// prepare for upload
+	caseOutputCh := make(chan *caseOutput, 32)
+	uploadFinishCh := make(chan struct{})
+
+	go uploader(ctx, sugar, w.backend, uploadFinishCh, caseOutputCh)
+
 	dag.Traverse(func(subtask *model.Subtask) bool {
 		subResult := score[subtask.Id]
 		subResult.IsRun = true
@@ -260,13 +283,12 @@ func (w *Worker) judgeOnDAG(
 			caseResult := &model.CaseResult{Id: uint32(i)}
 			subResult.CaseResults = append(subResult.CaseResults, caseResult)
 
-			timeLimit := time.Duration(p.DefaultTimeLimit) * time.Millisecond
-			spaceLimit := runner.Size(p.DefaultSpaceLimit * 1024 * 1024) // Megabytes.
-
 			var judgeRes *judge.JudgeRes
-			judgeRes, err = w.judge.Judge(
-				ctx, p, sub.Language, artifactIDs, testcase, timeLimit, spaceLimit,
-			)
+			judgeRes, err = w.judge.Judge(ctx, p, sub.Language, artifactIDs, testcase)
+			if judgeRes != nil {
+				outputFileCaches = append(outputFileCaches, judgeRes.Stdout, judgeRes.Stderr)
+			}
+
 			if err != nil {
 				sugar.Errorf("failed to judge due to an internal error: %+v", err)
 				caseResult.Conclusion = model.Conclusion_InternalError
@@ -279,11 +301,16 @@ func (w *Worker) judgeOnDAG(
 			caseResult.TotalTime = uint32(judgeRes.TotalTime.Milliseconds())
 			caseResult.TotalSpace = float32(judgeRes.TotalSpace.KiB()) / 1024
 			caseResult.ReturnValue = int32(judgeRes.ExitStatus)
-			caseResult.TruncatedOutput = &judgeRes.TruncatedOutput
+			caseResult.OutputSize = uint64(judgeRes.StdoutSize)
 
-			if judgeRes.OutputID != "" {
-				caseResult.OutputKey = judgeRes.OutputID
-				caseResult.OutputSize = uint64(judgeRes.OutputSize)
+			// TODO: read from judge file
+			if judgeRes.StdoutSize != 0 {
+				buffLen := lo.Clamp(judgeRes.StdoutSize, 0, int64(w.conf.JudgeOptions.MaxTruncatedOutput))
+				caseResult.TruncatedOutput = lo.ToPtr(truncate(judgeRes.Stdout, "", buffLen))
+				// Upload the output data when exceeding the record's limit.
+				if judgeRes.StdoutSize > buffLen {
+					caseOutputCh <- &caseOutput{caseResult: caseResult, outputFile: judgeRes.Stdout}
+				}
 			}
 
 			subResult.TotalTime += caseResult.TotalTime
@@ -312,8 +339,92 @@ func (w *Worker) judgeOnDAG(
 		return true
 	})
 
+	close(caseOutputCh)
+	<-uploadFinishCh
+	close(uploadFinishCh)
 	subResults = lo.Values(score)
 	return
+}
+
+func uploader(ctx context.Context, sugar *zap.SugaredLogger, backendCli backend.Client,
+	uploadFinishCh chan<- struct{}, caseOutputCh <-chan *caseOutput) {
+	defer func() { uploadFinishCh <- struct{}{} }()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case co, ok := <-caseOutputCh:
+			if !ok {
+				// upload finished
+				return
+			}
+			err := backoff.Retry(func() error {
+				key, err := backendCli.PutResourceStream(ctx, backend.ResourceType_OUTPUT_DATA,
+					int64(co.caseResult.OutputSize), io.NopCloser(co.outputFile))
+				if err != nil {
+					sugar.Debugf("failed to upload judge output: %v, retrying", err)
+					return err
+				}
+				co.caseResult.OutputKey = key
+				return nil
+			}, backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(time.Millisecond*200), 5), ctx))
+			if err != nil {
+				sugar.Errorf("failed to upload judge output to backend, err: %+v", err)
+			}
+			_ = co.outputFile.Close()
+		}
+	}
+}
+
+func truncateOutput(executeRes judge.ExecuteRes, outputLimit int64) *string {
+	const (
+		stdoutPrefix = "===== stdout ====="
+		stderrPrefix = "===== stderr ====="
+	)
+	var (
+		stdoutLimit = int64(-1)
+		stderrLimit = int64(-1)
+	)
+
+	if executeRes.StdoutSize+executeRes.StderrSize > outputLimit {
+		stdoutLimit = lo.Clamp(executeRes.StdoutSize, 0, outputLimit/2)
+		stderrLimit = lo.Clamp(executeRes.StderrSize, 0, outputLimit/2)
+	}
+
+	return lo.ToPtr(truncate(executeRes.Stdout, stdoutPrefix, stdoutLimit) +
+		truncate(executeRes.Stderr, stderrPrefix, stderrLimit))
+}
+
+func truncate(output io.Reader, prefix string, buffLen int64) string {
+	var (
+		err  error
+		buff []byte
+	)
+
+	if buffLen != -1 {
+		buff = make([]byte, buffLen)
+		_, err = io.ReadFull(output, buff)
+	} else {
+		buff, err = io.ReadAll(output)
+	}
+
+	content := lo.Ternary(err == nil, string(buff),
+		fmt.Sprintf("[internal error] failed to read content: %+v", err))
+	res := lo.Ternary(prefix != "", prefix+"\n"+content+"\n", content)
+
+	if buffLen != -1 && int64(len(res)) > buffLen {
+		res = res[:buffLen-1] + "\n"
+	}
+	return res
+}
+
+func (w *Worker) removeOutputFiles(sugar *zap.SugaredLogger, outputFileCaches []*os.File) {
+	for _, f := range outputFileCaches {
+		if err := os.Remove(f.Name()); err != nil {
+			sugar.With("err", err).Errorf("failed to remove file: %s", f.Name())
+		}
+		_ = f.Close()
+	}
 }
 
 func (w *Worker) Wait() {
