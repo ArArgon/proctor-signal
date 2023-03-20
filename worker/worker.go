@@ -229,7 +229,7 @@ func (w *Worker) compile(
 		result.CompilerOutput = lo.ToPtr(truncate(compileRes.Stderr, "",
 			lo.Clamp(compileRes.StderrSize, 0, int64(w.conf.JudgeOptions.MaxTruncatedOutput)),
 		))
-	} else {
+	} else if compileRes.Status != envexec.StatusAccepted {
 		result.CompilerOutput = lo.ToPtr(compileRes.Status.String())
 	}
 
