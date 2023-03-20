@@ -66,34 +66,34 @@ func TestCompareLines(t *testing.T) {
 
 	for name, expected := range expectedTestcases {
 		t.Run(name+"-ignoreNewline", func(t *testing.T) {
-			ok, err := compareLines(expected, actualWithoutNewline, true, getMd5())
+			ok, err := compareLines(expected, actualWithoutNewline, true)
 			assert.NoError(t, err)
 			assert.True(t, ok)
 			reseek(t, expected, actualWithoutNewline)
 
-			ok, err = compareLines(expected, actualWithNewline, true, getMd5())
+			ok, err = compareLines(expected, actualWithNewline, true)
 			assert.NoError(t, err)
 			assert.True(t, ok)
 			reseek(t, expected, actualWithNewline)
 
-			ok, err = compareLines(expected, actualWithDifferentEnter, true, getMd5())
+			ok, err = compareLines(expected, actualWithDifferentEnter, true)
 			assert.NoError(t, err)
 			assert.True(t, ok)
 			reseek(t, expected, actualWithDifferentEnter)
 		})
 
 		t.Run(name+"-notIgnoreNewline", func(t *testing.T) {
-			ok, err := compareLines(expected, actualWithoutNewline, false, getMd5())
+			ok, err := compareLines(expected, actualWithoutNewline, false)
 			assert.NoError(t, err)
 			assert.True(t, ok)
 			reseek(t, expected, actualWithoutNewline)
 
-			ok, err = compareLines(expected, actualWithNewline, false, getMd5())
+			ok, err = compareLines(expected, actualWithNewline, false)
 			assert.NoError(t, err)
 			assert.False(t, ok)
 			reseek(t, expected, actualWithNewline)
 
-			ok, err = compareLines(expected, actualWithDifferentEnter, false, getMd5())
+			ok, err = compareLines(expected, actualWithDifferentEnter, false)
 			assert.NoError(t, err)
 			assert.False(t, ok)
 			reseek(t, expected, actualWithDifferentEnter)
@@ -134,34 +134,34 @@ func TestCompareLinesNew(t *testing.T) {
 		}
 
 		t.Run("vanilla#"+label, func(t *testing.T) {
-			ok, err := compareLines(bytes.NewReader([]byte(text)), bytes.NewReader([]byte(text)), true, getMd5())
+			ok, err := compareLines(bytes.NewReader([]byte(text)), bytes.NewReader([]byte(text)), true)
 			assert.NoError(t, err)
 			assert.True(t, ok)
-			ok, err = compareLines(bytes.NewReader([]byte(text)), bytes.NewReader([]byte(text)), false, getMd5())
+			ok, err = compareLines(bytes.NewReader([]byte(text)), bytes.NewReader([]byte(text)), false)
 			assert.NoError(t, err)
 			assert.True(t, ok)
 		})
 
 		// ignoreNewline
 		t.Run("ignore-newline#"+label, func(t *testing.T) {
-			ok, err := compareLines(bytes.NewReader([]byte(text)), bytes.NewReader([]byte(newLine)), true, getMd5())
+			ok, err := compareLines(bytes.NewReader([]byte(text)), bytes.NewReader([]byte(newLine)), true)
 			assert.NoError(t, err)
 			assert.True(t, ok, "text: %x, newline: %x", text, newLine)
 		})
 		t.Run("ignore-newline-lr#"+label, func(t *testing.T) {
-			ok, err := compareLines(bytes.NewReader([]byte(text)), bytes.NewReader([]byte(newLineLR)), true, getMd5())
+			ok, err := compareLines(bytes.NewReader([]byte(text)), bytes.NewReader([]byte(newLineLR)), true)
 			assert.NoError(t, err)
 			assert.True(t, ok, "text: %x, newlineLR: %x", text, newLineLR)
 		})
 
 		// notIgnoreNewline
 		t.Run("not-ignore-newline#"+label, func(t *testing.T) {
-			ok, err := compareLines(bytes.NewReader([]byte(text)), bytes.NewReader([]byte(newLine)), false, getMd5())
+			ok, err := compareLines(bytes.NewReader([]byte(text)), bytes.NewReader([]byte(newLine)), false)
 			assert.NoError(t, err)
 			assert.Falsef(t, ok, "text: %x, newline: %x", text, newLine)
 		})
 		t.Run("not-ignore-newline-lr#"+label, func(t *testing.T) {
-			ok, err := compareLines(bytes.NewReader([]byte(text)), bytes.NewReader([]byte(newLineLR)), false, getMd5())
+			ok, err := compareLines(bytes.NewReader([]byte(text)), bytes.NewReader([]byte(newLineLR)), false)
 			assert.NoError(t, err)
 			assert.Falsef(t, ok, "text: %x, newlineLR: %x", text, newLineLR)
 		})

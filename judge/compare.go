@@ -12,13 +12,16 @@ import (
 	"math"
 	"reflect"
 	"strconv"
+
+	"proctor-signal/model"
 )
 
-type compareFunc func(expected, actual []byte) (bool, error)
+type accumulateCompareFunc func(expected, actual []byte) (bool, error)
+type comparator func(expected, actual io.Reader) (bool, error)
 
 const newline = '\n'
 
-func getMd5() compareFunc {
+func getMd5() accumulateCompareFunc {
 	expectedHash := md5.New()
 	actualHash := md5.New()
 	return func(expected, actual []byte) (bool, error) {
@@ -29,6 +32,23 @@ func getMd5() compareFunc {
 			return false, err
 		}
 		return reflect.DeepEqual(expectedHash.Sum(nil), actualHash.Sum(nil)), nil
+	}
+}
+
+func composeComparator(p *model.Problem) comparator {
+	switch p.DiffPolicy {
+	case model.DiffPolicy_FLOAT:
+		return func(expected, actual io.Reader) (bool, error) {
+			return compareFloats(expected, actual, int(*p.FloatEps))
+		}
+	case model.DiffPolicy_LINE:
+		return func(expected, actual io.Reader) (bool, error) {
+			return compareLines(expected, actual, p.IgnoreNewline)
+		}
+	default:
+		return func(expected, actual io.Reader) (bool, error) {
+			return compareAll(expected, actual, 1024)
+		}
 	}
 }
 
@@ -54,8 +74,9 @@ func compareAll(expected, actual io.Reader, buffLen int) (bool, error) {
 	return (expectLen == actualLen) && bytes.Equal(expectHash.Sum(nil), actualHash.Sum(nil)), nil
 }
 
-func compareLines(expected, actual io.Reader, ignoreNewline bool, fn compareFunc) (bool, error) {
+func compareLines(expected, actual io.Reader, ignoreNewline bool) (bool, error) {
 	//return compareLines2(expected, actual, ignoreNewline)
+	fn := getMd5()
 	expectedOutputScanner := bufio.NewScanner(expected)
 	actualOutputReader := bufio.NewReader(actual)
 	expectedOutputScanner.Scan()
