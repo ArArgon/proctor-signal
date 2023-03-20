@@ -285,11 +285,17 @@ func (w *Worker) judgeOnDAG(
 					return
 				}
 
-				if key, err := w.backend.PutResourceStream(ctx, backend.ResourceType_OUTPUT_DATA,
-					int64(co.caseResult.OutputSize), co.outputFile); err != nil {
-					sugar.Errorf("failed to upload judge output to backend, err: %v", err)
-				} else {
+				retryTimes := 3
+				for retryTimes > 0 {
+					key, err := w.backend.PutResourceStream(ctx, backend.ResourceType_OUTPUT_DATA,
+						int64(co.caseResult.OutputSize), co.outputFile)
+					if err != nil {
+						sugar.Errorf("failed to upload judge output to backend, err: %v, last retry times: %d", err, retryTimes)
+						retryTimes--
+						continue
+					}
 					co.caseResult.OutputKey = key
+					break
 				}
 			}
 		}
@@ -326,16 +332,19 @@ func (w *Worker) judgeOnDAG(
 
 			// TODO: read from judge file
 			if judgeRes.StdoutSize != 0 {
-				buff := make([]byte, lo.Clamp(judgeRes.StdoutSize, 0, int64(w.conf.JudgeOptions.MaxTruncatedOutput)))
+				bufflen := lo.Clamp(judgeRes.StdoutSize, 0, int64(w.conf.JudgeOptions.MaxTruncatedOutput))
+				buff := make([]byte, bufflen)
 				if _, err := io.ReadFull(judgeRes.Stdout, buff); err == nil {
 					caseResult.TruncatedOutput = lo.ToPtr(string(buff))
 				} else {
 					caseResult.TruncatedOutput = lo.ToPtr("failed to read stdout")
 				}
-			}
 
-			caseResult.OutputSize = uint64(judgeRes.StdoutSize)
-			caseOutputCh <- &caseOutput{caseResult: caseResult, outputFile: judgeRes.Stdout}
+				if judgeRes.StdoutSize > bufflen {
+					caseResult.OutputSize = uint64(judgeRes.StdoutSize)
+					caseOutputCh <- &caseOutput{caseResult: caseResult, outputFile: judgeRes.Stdout}
+				}
+			}
 
 			subResult.TotalTime += caseResult.TotalTime
 			if subResult.TotalSpace < caseResult.TotalSpace {
