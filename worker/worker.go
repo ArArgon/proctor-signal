@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -219,21 +220,17 @@ func (w *Worker) compile(
 	result.ErrMessage = lo.ToPtr(compileRes.Error)
 
 	if compileRes.StdoutSize != 0 && compileRes.StderrSize != 0 {
-		result.CompilerOutput = w.truncateOutput(compileRes.ExecuteRes)
+		result.CompilerOutput = truncateOutput(compileRes.ExecuteRes, int64(w.conf.JudgeOptions.MaxTruncatedOutput))
 	} else if compileRes.StdoutSize != 0 {
-		buff := make([]byte, lo.Clamp(compileRes.StdoutSize, 0, int64(w.conf.JudgeOptions.MaxTruncatedOutput)))
-		if _, err := io.ReadFull(compileRes.Stdout, buff); err == nil {
-			result.CompilerOutput = lo.ToPtr(string(buff))
-		} else {
-			result.CompilerOutput = lo.ToPtr("failed to read stdout")
-		}
+		result.CompilerOutput = lo.ToPtr(truncate(compileRes.Stdout, "",
+			lo.Clamp(compileRes.StdoutSize, 0, int64(w.conf.JudgeOptions.MaxTruncatedOutput)),
+		))
 	} else if compileRes.StderrSize != 0 {
-		buff := make([]byte, lo.Clamp(compileRes.StderrSize, 0, int64(w.conf.JudgeOptions.MaxTruncatedOutput)))
-		if _, err := io.ReadFull(compileRes.Stderr, buff); err == nil {
-			result.CompilerOutput = lo.ToPtr(string(buff))
-		} else {
-			result.CompilerOutput = lo.ToPtr("failed to read stderr")
-		}
+		result.CompilerOutput = lo.ToPtr(truncate(compileRes.Stderr, "",
+			lo.Clamp(compileRes.StderrSize, 0, int64(w.conf.JudgeOptions.MaxTruncatedOutput)),
+		))
+	} else {
+		result.CompilerOutput = lo.ToPtr(compileRes.Status.String())
 	}
 
 	if compileRes.Status != envexec.StatusAccepted {
@@ -244,6 +241,11 @@ func (w *Worker) compile(
 		return nil, true, nil
 	}
 	return compileRes.ArtifactFileIDs, false, nil
+}
+
+type caseOutput struct {
+	caseResult *model.CaseResult
+	outputFile *os.File
 }
 
 func (w *Worker) judgeOnDAG(
@@ -266,40 +268,10 @@ func (w *Worker) judgeOnDAG(
 	}
 
 	// prepare for upload
-	type caseOutput struct {
-		caseResult *model.CaseResult
-		outputFile *os.File
-	}
 	caseOutputCh := make(chan *caseOutput, 32)
 	uploadFinishCh := make(chan struct{})
 
-	go func() {
-		defer close(uploadFinishCh)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case co, ok := <-caseOutputCh:
-				if !ok {
-					// upload finished
-					return
-				}
-
-				retryTimes := 3
-				for retryTimes > 0 {
-					key, err := w.backend.PutResourceStream(ctx, backend.ResourceType_OUTPUT_DATA,
-						int64(co.caseResult.OutputSize), co.outputFile)
-					if err != nil {
-						sugar.Errorf("failed to upload judge output to backend, err: %v, last retry times: %d", err, retryTimes)
-						retryTimes--
-						continue
-					}
-					co.caseResult.OutputKey = key
-					break
-				}
-			}
-		}
-	}()
+	go uploader(ctx, sugar, w.backend, uploadFinishCh, caseOutputCh)
 
 	dag.Traverse(func(subtask *model.Subtask) bool {
 		subResult := score[subtask.Id]
@@ -329,19 +301,14 @@ func (w *Worker) judgeOnDAG(
 			caseResult.TotalTime = uint32(judgeRes.TotalTime.Milliseconds())
 			caseResult.TotalSpace = float32(judgeRes.TotalSpace.KiB()) / 1024
 			caseResult.ReturnValue = int32(judgeRes.ExitStatus)
+			caseResult.OutputSize = uint64(judgeRes.StdoutSize)
 
 			// TODO: read from judge file
 			if judgeRes.StdoutSize != 0 {
-				bufflen := lo.Clamp(judgeRes.StdoutSize, 0, int64(w.conf.JudgeOptions.MaxTruncatedOutput))
-				buff := make([]byte, bufflen)
-				if _, err := io.ReadFull(judgeRes.Stdout, buff); err == nil {
-					caseResult.TruncatedOutput = lo.ToPtr(string(buff))
-				} else {
-					caseResult.TruncatedOutput = lo.ToPtr("failed to read stdout")
-				}
-
-				if judgeRes.StdoutSize > bufflen {
-					caseResult.OutputSize = uint64(judgeRes.StdoutSize)
+				buffLen := lo.Clamp(judgeRes.StdoutSize, 0, int64(w.conf.JudgeOptions.MaxTruncatedOutput))
+				caseResult.TruncatedOutput = lo.ToPtr(truncate(judgeRes.Stdout, "", buffLen))
+				// Upload the output data when exceeding the record's limit.
+				if judgeRes.StdoutSize > buffLen {
 					caseOutputCh <- &caseOutput{caseResult: caseResult, outputFile: judgeRes.Stdout}
 				}
 			}
@@ -374,81 +341,80 @@ func (w *Worker) judgeOnDAG(
 
 	close(caseOutputCh)
 	<-uploadFinishCh
+	close(uploadFinishCh)
 	subResults = lo.Values(score)
 	return
 }
 
-func (w *Worker) truncateOutput(executeRes judge.ExecuteRes) *string {
-	var output string
-	if executeRes.StdoutSize+executeRes.StderrSize > int64(w.conf.JudgeOptions.MaxTruncatedOutput) {
-		if executeRes.StdoutSize > int64(w.conf.JudgeOptions.MaxTruncatedOutput)/2 &&
-			executeRes.StderrSize < int64(w.conf.JudgeOptions.MaxTruncatedOutput)/2 {
-			// read all executeRes.Stderr
-			output = truncateStdout(executeRes.Stdout, int64(w.conf.JudgeOptions.MaxTruncatedOutput)-executeRes.StderrSize)
-			if executeRes.StderrSize != 0 {
-				output += truncateStderr(executeRes.Stderr, -1)
+func uploader(ctx context.Context, sugar *zap.SugaredLogger, backendCli backend.Client,
+	uploadFinishCh chan<- struct{}, caseOutputCh <-chan *caseOutput) {
+	defer func() { uploadFinishCh <- struct{}{} }()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case co, ok := <-caseOutputCh:
+			if !ok {
+				// upload finished
+				return
 			}
-		} else if executeRes.StdoutSize < int64(w.conf.JudgeOptions.MaxTruncatedOutput)/2 &&
-			executeRes.StderrSize > int64(w.conf.JudgeOptions.MaxTruncatedOutput)/2 {
-			// read all executeRes.Stdout
-			if executeRes.StdoutSize != 0 {
-				output = truncateStdout(executeRes.Stdout, -1)
+			err := backoff.Retry(func() error {
+				key, err := backendCli.PutResourceStream(ctx, backend.ResourceType_OUTPUT_DATA,
+					int64(co.caseResult.OutputSize), io.NopCloser(co.outputFile))
+				if err != nil {
+					sugar.Debugf("failed to upload judge output: %v, retrying", err)
+					return err
+				}
+				co.caseResult.OutputKey = key
+				return nil
+			}, backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(time.Millisecond*200), 5), ctx))
+			if err != nil {
+				sugar.Errorf("failed to upload judge output to backend, err: %+v", err)
 			}
-			output += truncateStderr(executeRes.Stderr, int64(w.conf.JudgeOptions.MaxTruncatedOutput)-executeRes.StdoutSize)
-		} else {
-			// read both half
-			output = truncateStdout(executeRes.Stdout, int64(w.conf.JudgeOptions.MaxTruncatedOutput)) +
-				truncateStderr(executeRes.Stderr, int64(w.conf.JudgeOptions.MaxTruncatedOutput))
-		}
-	} else {
-		// read all
-		if executeRes.StdoutSize != 0 {
-			output = truncateStdout(executeRes.Stdout, -1)
-		}
-		if executeRes.StderrSize != 0 {
-			output += truncateStderr(executeRes.Stderr, -1)
+			_ = co.outputFile.Close()
 		}
 	}
-	return &output
 }
 
-func truncateStdout(stdout *os.File, buffLen int64) string {
-	var res string
-	if buffLen == -1 {
-		if buff, err := io.ReadAll(stdout); err != nil {
-			res = "===stdout:\nfailed to read stdout\n"
-		} else {
-			res = "===stdout:\n" + string(buff) + "\n"
-		}
-	} else {
-		buff := make([]byte, buffLen)
-		if _, err := io.ReadFull(stdout, buff); err != nil {
-			res = "===stdout:\nfailed to read stdout\n"
-		} else {
-			res = "===stdout:\n" + string(buff) + "\n"
-		}
+func truncateOutput(executeRes judge.ExecuteRes, outputLimit int64) *string {
+	const (
+		stdoutPrefix = "===== stdout ====="
+		stderrPrefix = "===== stderr ====="
+	)
+	var (
+		stdoutLimit = int64(-1)
+		stderrLimit = int64(-1)
+	)
+
+	if executeRes.StdoutSize+executeRes.StderrSize > outputLimit {
+		stdoutLimit = lo.Clamp(executeRes.StdoutSize, 0, outputLimit/2)
+		stderrLimit = lo.Clamp(executeRes.StderrSize, 0, outputLimit/2)
 	}
 
-	return res
+	return lo.ToPtr(truncate(executeRes.Stdout, stdoutPrefix, stdoutLimit) +
+		truncate(executeRes.Stderr, stderrPrefix, stderrLimit))
 }
 
-func truncateStderr(stderr *os.File, buffLen int64) string {
-	var res string
-	if buffLen == -1 {
-		if buff, err := io.ReadAll(stderr); err != nil {
-			res = "===stderr:\nfailed to read stderr\n"
-		} else {
-			res = "===stderr:\n" + string(buff) + "\n"
-		}
+func truncate(output io.Reader, prefix string, buffLen int64) string {
+	var (
+		err  error
+		buff []byte
+	)
+
+	if buffLen != -1 {
+		buff = make([]byte, buffLen)
+		_, err = io.ReadFull(output, buff)
 	} else {
-		buff := make([]byte, buffLen)
-		if _, err := io.ReadFull(stderr, buff); err != nil {
-			res = "===stderr:\nfailed to read stderr\n"
-		} else {
-			res = "===stderr:\n" + string(buff) + "\n"
-		}
+		buff, err = io.ReadAll(output)
 	}
 
+	content := lo.Ternary(err == nil, string(buff),
+		fmt.Sprintf("[internal error] failed to read content: %+v", err))
+	res := lo.Ternary(prefix != "", prefix+"\n"+content+"\n", content)
+
+	if buffLen != -1 && int64(len(res)) > buffLen {
+		res = res[:buffLen-1] + "\n"
+	}
 	return res
 }
 
