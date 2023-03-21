@@ -113,7 +113,7 @@ func TestCompareLinesNew(t *testing.T) {
 		for i := 1; i < lines; i++ {
 			lr := (rand.Int() % 2) == 0
 			res += lo.Ternary(lr, "\r\n", "\n") +
-				lo.RandomString(lo.Clamp(rand.Intn(1024), 1, 1024), []rune(utils.AlphaNumericTable))
+				lo.RandomString(lo.Clamp(rand.Intn(5120), 1, 5120), []rune(utils.AlphaNumericTable))
 		}
 
 		return res

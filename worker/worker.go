@@ -359,6 +359,10 @@ func uploader(ctx context.Context, sugar *zap.SugaredLogger, backendCli backend.
 				return
 			}
 			err := backoff.Retry(func() error {
+				if _, err := co.outputFile.Seek(0, 0); err != nil {
+					sugar.Debugf("failed to re-seek judge output to the beginning: %v, retrying", err)
+					return err
+				}
 				key, err := backendCli.PutResourceStream(ctx, backend.ResourceType_OUTPUT_DATA,
 					int64(co.caseResult.OutputSize), io.NopCloser(co.outputFile))
 				if err != nil {

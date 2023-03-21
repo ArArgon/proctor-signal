@@ -43,7 +43,7 @@ func composeComparator(p *model.Problem) comparator {
 		}
 	case model.DiffPolicy_LINE:
 		return func(expected, actual io.Reader) (bool, error) {
-			return compareLines(expected, actual, p.IgnoreNewline)
+			return compareLines2(expected, actual, p.IgnoreNewline)
 		}
 	default:
 		return func(expected, actual io.Reader) (bool, error) {
