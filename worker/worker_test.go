@@ -107,7 +107,6 @@ func Test_uploader(t *testing.T) {
 		lo.Must(io.CopyN(io.MultiWriter(file, hash), rand2.Reader, size))
 		temps = append(temps, file)
 
-		lo.Must(file.Seek(0, 0))
 		payload := testOutput{
 			caseOutput: &caseOutput{
 				caseResult: &model.CaseResult{

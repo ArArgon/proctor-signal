@@ -110,7 +110,7 @@ func (c *client) GetResourceStream(
 	ctx context.Context, resourceType ResourceType, key string,
 ) (int64, io.ReadCloser, error) {
 	// URL: /resource/:type/:key
-	path, err := url.JoinPath(c.baseURL, "/resource", resourceType.String(), key)
+	path, err := url.JoinPath(c.baseURL, "/resource/", resourceType.String(), key)
 	if err != nil {
 		return 0, nil, errors.WithMessage(err, "invalid resource key")
 	}
@@ -148,7 +148,10 @@ type putResourceStreamResponse struct {
 func (c *client) PutResourceStream(
 	ctx context.Context, resourceType ResourceType, size int64, body io.ReadCloser,
 ) (string, error) {
-	path, err := url.JoinPath(c.baseURL, "/resource", resourceType.String())
+	if resourceType != ResourceType_OUTPUT_DATA {
+		return "", errors.Errorf("unsupported resource type: %s", resourceType.String())
+	}
+	path, err := url.JoinPath(c.baseURL, "/resource/")
 	if err != nil {
 		return "", errors.WithMessage(err, "invalid resource key")
 	}
