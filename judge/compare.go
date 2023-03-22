@@ -75,7 +75,6 @@ func compareAll(expected, actual io.Reader, buffLen int) (bool, error) {
 }
 
 func compareLines(expected, actual io.Reader, ignoreNewline bool) (bool, error) {
-	//return compareLines2(expected, actual, ignoreNewline)
 	fn := getMd5()
 	expectedOutputScanner := bufio.NewScanner(expected)
 	actualOutputReader := bufio.NewReader(actual)
@@ -128,31 +127,40 @@ func compareLines(expected, actual io.Reader, ignoreNewline bool) (bool, error) 
 }
 
 func iterHash(r *bufio.Reader, h hash.Hash, ignoreNewline bool) error {
-	b, err := r.ReadBytes(newline)
-	if err != nil && err != io.EOF {
-		return err
+	var b []byte
+	var err error
+
+	for {
+		b, err = r.ReadSlice(newline)
+		if err == nil || err == io.EOF {
+			break
+		}
+
+		if err != bufio.ErrBufferFull {
+			return err
+		}
+
+		// Full buffer, no delim.
+		if _, hashErr := h.Write(filter(b)); hashErr != nil {
+			return hashErr
+		}
 	}
 
-	var (
-		hashErr error
-		trim    = filter(b)
-	)
-
-	if _, hashErr = h.Write(trim); hashErr != nil {
+	var trim = filter(b)
+	if _, hashErr := h.Write(trim); hashErr != nil {
 		return hashErr
 	}
 
 	if ignoreNewline || len(b) == len(trim) || (len(b) > 0 && b[len(b)-1] != '\n') {
 		return err
 	}
-	if _, hashErr = h.Write([]byte{newline}); hashErr != nil {
+	if _, hashErr := h.Write([]byte{newline}); hashErr != nil {
 		return hashErr
 	}
 	return err
 }
 
 func compareLines2(expected, actual io.Reader, ignoreNewline bool) (bool, error) {
-
 	var (
 		expectHash   = md5.New()
 		actualHash   = md5.New()
