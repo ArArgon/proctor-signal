@@ -57,6 +57,8 @@ type ExecuteRes struct {
 	Error      string
 	Stdout     *os.File
 	StdoutSize int64
+	Output     *os.File
+	OutputSize int64
 	Stderr     *os.File
 	StderrSize int64
 	TotalTime  time.Duration
@@ -192,8 +194,22 @@ func (m *Manager) Compile(ctx context.Context, sub *model.Submission) (*CompileR
 }
 
 // Execute executes cmd with stdin and copyIn files.
-func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
-	copyInFileIDs map[string]string, CPULimit time.Duration, memoryLimit runner.Size) (*ExecuteRes, error) {
+func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile, copyInFileIDs map[string]string,
+	outputFile string, CPULimit time.Duration, memoryLimit runner.Size) (*ExecuteRes, error) {
+	// prepare copyin and copyout files
+	copyInFiles := make(map[string]worker.CmdFile)
+	for filename, fileID := range copyInFileIDs {
+		copyInFiles[filename] = &worker.CachedFile{FileID: fileID}
+	}
+
+	copyOutFiles := []worker.CmdCopyOutFile{
+		{Name: "stdout", Optional: true},
+		{Name: "stderr", Optional: true},
+	}
+	if outputFile != "" {
+		copyOutFiles = append(copyOutFiles, envexec.CmdCopyOutFile{Name: outputFile, Optional: true})
+	}
+
 	workerCmd := worker.Cmd{
 		Env:         []string{"PATH=/usr/bin:/bin"},
 		Args:        strings.Split(cmd, " "),
@@ -206,14 +222,8 @@ func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
 			&worker.Collector{Name: "stdout", Max: maxStdoutSize},
 			&worker.Collector{Name: "stderr", Max: maxStdoutSize},
 		},
-		CopyOut: []worker.CmdCopyOutFile{
-			{Name: "stdout", Optional: true},
-			{Name: "stderr", Optional: true},
-		},
-	}
-	workerCmd.CopyIn = make(map[string]worker.CmdFile)
-	for filename, fileID := range copyInFileIDs {
-		workerCmd.CopyIn[filename] = &worker.CachedFile{FileID: fileID}
+		CopyIn:  copyInFiles,
+		CopyOut: copyOutFiles,
 	}
 
 	res := <-m.worker.Execute(ctx, &worker.Request{Cmd: []worker.Cmd{workerCmd}})
@@ -231,6 +241,17 @@ func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
 	}
 
 	// read execute output
+	if outputFile != "" {
+		if f, ok := result.Files[outputFile]; ok {
+			size, err := reseekAndGetSize(f)
+			if err != nil {
+				return executeRes, err
+			}
+			executeRes.Output = f
+			executeRes.OutputSize = size
+		}
+	}
+
 	if f, ok := result.Files["stdout"]; ok {
 		size, err := reseekAndGetSize(f)
 		if err != nil {
@@ -283,7 +304,7 @@ func (m *Manager) Judge(
 
 	executeRes, err := m.Execute(
 		ctx, strings.Join(conf.getRunCmd(), " "),
-		&worker.CachedFile{FileID: fsKey(p, testcase.InputKey)}, copyInFileIDs,
+		&worker.CachedFile{FileID: fsKey(p, testcase.InputKey)}, copyInFileIDs, p.OutputFile,
 		time.Duration(p.DefaultTimeLimit)*time.Millisecond*time.Duration(conf.raw.ResourceFactor),
 		runner.Size(p.DefaultSpaceLimit*1024*1024)*runner.Size(conf.raw.ResourceFactor),
 	)
@@ -311,8 +332,12 @@ func (m *Manager) Judge(
 		return judgeRes, err
 	}
 
-	// Only judge on executeRes.Stdout, ignore executeRes.Stderr
-	ok, err = composeComparator(p)(testcaseOutputReader, executeRes.Stdout)
+	// Only judge on executeRes.Stdout or executeRes.Output, ignore executeRes.Stderr
+	if p.OutputFile == "" {
+		ok, err = composeComparator(p)(testcaseOutputReader, executeRes.Stdout)
+	} else {
+		ok, err = composeComparator(p)(testcaseOutputReader, executeRes.Output)
+	}
 
 	if err != nil {
 		judgeRes.Conclusion = model.Conclusion_InternalError
