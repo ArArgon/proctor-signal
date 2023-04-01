@@ -287,6 +287,9 @@ func (w *Worker) judgeOnDAG(
 			judgeRes, err = w.judge.Judge(ctx, p, sub.Language, artifactIDs, testcase)
 			if judgeRes != nil {
 				outputFileCaches = append(outputFileCaches, judgeRes.Stdout, judgeRes.Stderr)
+				if judgeRes.Output != nil {
+					outputFileCaches = append(outputFileCaches, judgeRes.Output)
+				}
 			}
 
 			if err != nil {
@@ -303,13 +306,24 @@ func (w *Worker) judgeOnDAG(
 			caseResult.ReturnValue = int32(judgeRes.ExitStatus)
 			caseResult.OutputSize = uint64(judgeRes.StdoutSize)
 
-			// TODO: read from judge file
-			if judgeRes.StdoutSize != 0 {
-				buffLen := lo.Clamp(judgeRes.StdoutSize, 0, int64(w.conf.JudgeOptions.MaxTruncatedOutput))
-				caseResult.TruncatedOutput = lo.ToPtr(truncate(judgeRes.Stdout, "", buffLen))
-				// Upload the output data when exceeding the record's limit.
-				if judgeRes.StdoutSize > buffLen {
-					caseOutputCh <- &caseOutput{caseResult: caseResult, outputFile: judgeRes.Stdout}
+			// case output handle
+			if p.OutputFile == "" {
+				if judgeRes.StdoutSize != 0 {
+					buffLen := lo.Clamp(judgeRes.StdoutSize, 0, int64(w.conf.JudgeOptions.MaxTruncatedOutput))
+					caseResult.TruncatedOutput = lo.ToPtr(truncate(judgeRes.Stdout, "", buffLen))
+					// Upload the output data when exceeding the record's limit.
+					if judgeRes.StdoutSize > buffLen {
+						caseOutputCh <- &caseOutput{caseResult: caseResult, outputFile: judgeRes.Stdout}
+					}
+				}
+			} else {
+				if judgeRes.OutputSize != 0 {
+					buffLen := lo.Clamp(judgeRes.OutputSize, 0, int64(w.conf.JudgeOptions.MaxTruncatedOutput))
+					caseResult.TruncatedOutput = lo.ToPtr(truncate(judgeRes.Output, "", buffLen))
+					// Upload the output data when exceeding the record's limit.
+					if judgeRes.OutputSize > buffLen {
+						caseOutputCh <- &caseOutput{caseResult: caseResult, outputFile: judgeRes.Output}
+					}
 				}
 			}
 

@@ -115,7 +115,7 @@ func TestExecute(t *testing.T) {
 		t.Run(language, func(t *testing.T) {
 			executeRes, err := judgeManger.Execute(ctx,
 				conf.ExecuteCmd,
-				&worker.MemoryFile{Content: []byte(stdin)}, fileCaches[language],
+				&worker.MemoryFile{Content: []byte(stdin)}, fileCaches[language], p.OutputFile,
 				time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit),
 			)
 			assert.NotNil(t, executeRes)
@@ -198,7 +198,7 @@ func TestCompileOption(t *testing.T) {
 
 				executeRes, err := judgeManger.Execute(ctx,
 					conf.ExecuteCmd,
-					&worker.MemoryFile{Content: []byte(stdin)}, compileRes.ArtifactFileIDs,
+					&worker.MemoryFile{Content: []byte(stdin)}, compileRes.ArtifactFileIDs, "",
 					time.Second, runner.Size(104857600),
 				)
 				defer func() {
@@ -245,7 +245,7 @@ func TestCompileMultiOptions(t *testing.T) {
 
 	executeRes, err := judgeManger.Execute(ctx,
 		conf.ExecuteCmd,
-		&worker.MemoryFile{Content: []byte("")}, compileRes.ArtifactFileIDs,
+		&worker.MemoryFile{Content: []byte("")}, compileRes.ArtifactFileIDs, "",
 		time.Second, runner.Size(104857600),
 	)
 	defer func() {
