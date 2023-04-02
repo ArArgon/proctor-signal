@@ -1,6 +1,9 @@
 .idea/
 .vscode/
 
+### for test
+docker-compose.yaml
+
 ### Keys
 *.pem
 *.pk8
