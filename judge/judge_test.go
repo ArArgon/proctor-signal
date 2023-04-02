@@ -27,9 +27,12 @@ import (
 	"github.com/criyle/go-sandbox/runner"
 )
 
-var judgeManger *Manager
-
-var languageConfig config.LanguageConf
+var (
+	judgeManger    *Manager
+	languageConfig config.LanguageConf
+	problem        *model.Problem
+	testcase       *model.TestCase
+)
 
 func TestMain(m *testing.M) {
 	// Init gojudge
@@ -64,6 +67,31 @@ func TestMain(m *testing.M) {
 	languageConfig = judgeConf.LanguageConf
 	judgeManger = lo.Must(NewJudgeManager(goJudgeWorker, judgeConf, fs, logger))
 
+	// prepare problem
+	problem = &model.Problem{
+		DefaultTimeLimit:  uint32(time.Second),
+		DefaultSpaceLimit: 256,
+		DiffPolicy:        model.DiffPolicy_LINE,
+		IgnoreNewline:     true,
+	}
+
+	// prepare testcase
+	stdin := "Hello,world.\n" // should not contain space
+	testcase = &model.TestCase{}
+	f, err := judgeManger.fs.New()
+	if err != nil {
+		panic("failed to new file from fs, err: " + err.Error())
+	}
+	if _, err = io.WriteString(f, stdin); err != nil {
+		panic("failed to write into file, err: " + err.Error())
+	}
+
+	testcase.InputKey, err = judgeManger.fs.Add("stdin", f.Name())
+	if err != nil {
+		panic("failed to add file into fs, err: " + err.Error())
+	}
+	testcase.OutputKey = testcase.InputKey
+
 	os.Exit(m.Run())
 }
 
@@ -76,6 +104,19 @@ func loadConf() *config.JudgeConfig {
 		log.Fatalln("load config failed ", err)
 	}
 	return (*config.JudgeConfig)(&conf)
+}
+
+func getTestcaseOutput(testcase *model.TestCase) ([]byte, error) {
+	f, _, err := judgeManger.fs.GetOsFile(testcase.OutputKey)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
 var fileCaches map[string]map[string]string
@@ -108,71 +149,59 @@ func TestCompile(t *testing.T) {
 func TestExecute(t *testing.T) {
 	p := &model.Problem{DefaultTimeLimit: uint32(time.Second), DefaultSpaceLimit: 104857600}
 	ctx := context.Background()
-	stdin := "Hello,world.\n" // should not contain space
-	stdout := stdin
 
 	for language, conf := range languageConfig {
 		t.Run(language, func(t *testing.T) {
 			executeRes, err := judgeManger.Execute(ctx,
 				conf.ExecuteCmd,
-				&worker.MemoryFile{Content: []byte(stdin)}, fileCaches[language], p.OutputFile,
+				&worker.CachedFile{FileID: testcase.InputKey}, fileCaches[language], "",
 				time.Duration(p.DefaultTimeLimit), runner.Size(p.DefaultSpaceLimit),
 			)
 			assert.NotNil(t, executeRes)
-
 			assert.NoError(t, err)
-
 			if executeRes.ExitStatus != 0 {
 				t.Errorf("failed to execute: executeRes.ExitStatus != 0, executeRes: %+v", executeRes)
 			}
-			bytes, err := io.ReadAll(executeRes.Stdout)
+
+			testcaseOutput, err := getTestcaseOutput(testcase)
+			assert.NoErrorf(t, err, "failed to read tesetcase output")
+
+			executeOutput, err := io.ReadAll(executeRes.Stdout)
 			if err != nil {
 				t.Errorf("failed to read execute output, executeRes: %+v", executeRes)
 			}
 
-			assert.Equal(t, stdout, string(bytes), fmt.Sprintf("executeRes: %+v", executeRes))
+			assert.Equal(t, testcaseOutput, executeOutput, fmt.Sprintf("executeRes: %+v", executeRes))
 		})
 	}
 }
 
 func TestJudge(t *testing.T) {
-	p := &model.Problem{
-		DefaultTimeLimit:  uint32(time.Second),
-		DefaultSpaceLimit: 256,
-		DiffPolicy:        model.DiffPolicy_LINE,
-		IgnoreNewline:     true,
-	}
 	ctx := context.Background()
-
-	var err error
-	testcase := &model.TestCase{}
-	f, err := judgeManger.fs.New()
-	assert.NoError(t, err)
-	_, err = io.WriteString(f, "Hello,world.\n")
-	assert.NoError(t, err)
-	testcase.InputKey, err = judgeManger.fs.Add("stddin", f.Name())
-	assert.NoError(t, err)
-	testcase.OutputKey = testcase.InputKey
 
 	for language := range languageConfig {
 		t.Run(language, func(t *testing.T) {
-			judgeRes, err := judgeManger.Judge(ctx, p, language, fileCaches[language], testcase)
+			judgeRes, err := judgeManger.Judge(ctx, problem, language, fileCaches[language], testcase)
 			assert.NotNil(t, judgeRes)
 			assert.NoError(t, err)
-
 			assert.Equal(t, model.Conclusion_Accepted, judgeRes.Conclusion)
 
-			buff, err := io.ReadAll(judgeRes.Stdout)
-			assert.NoError(t, err)
-			assert.Equal(t, "Hello,world.\n", string(buff))
+			// recheck
+			testcaseOutput, err := getTestcaseOutput(testcase)
+			assert.NoErrorf(t, err, "failed to read tesetcase output")
+
+			judgeOutput, err := io.ReadAll(judgeRes.Stdout)
+			if err != nil {
+				t.Errorf("failed to read judge output, judgeRes: %+v", judgeRes)
+			}
+
+			assert.Equal(t, testcaseOutput, judgeOutput)
 		})
 	}
 }
 
 func TestCompileOption(t *testing.T) {
 	ctx := context.Background()
-	stdin := "Hello,world.\n" // should not contain space
-	stdout := stdin
 
 	for language, conf := range languageConfig {
 		for optName := range conf.Options {
@@ -196,26 +225,21 @@ func TestCompileOption(t *testing.T) {
 						"==stdout==\n"+string(stdout)+"==stderr==\n"+string(stderr), compileRes)
 				}
 
-				executeRes, err := judgeManger.Execute(ctx,
-					conf.ExecuteCmd,
-					&worker.MemoryFile{Content: []byte(stdin)}, compileRes.ArtifactFileIDs, "",
-					time.Second, runner.Size(104857600),
-				)
-				defer func() {
-					_ = executeRes.Stdout.Close()
-					_ = executeRes.Stderr.Close()
-				}()
-
+				judgeRes, err := judgeManger.Judge(ctx, problem, language, fileCaches[language], testcase)
+				assert.NotNil(t, judgeRes)
 				assert.NoError(t, err)
-				if executeRes.ExitStatus != 0 {
-					t.Errorf("failed to execute: executeRes.ExitStatus != 0, executeRes: %+v", executeRes)
-				}
-				bytes, err := io.ReadAll(executeRes.Stdout)
+				assert.Equal(t, model.Conclusion_Accepted, judgeRes.Conclusion)
+
+				// recheck
+				testcaseOutput, err := getTestcaseOutput(testcase)
+				assert.NoErrorf(t, err, "failed to read tesetcase output")
+
+				judgeOutput, err := io.ReadAll(judgeRes.Stdout)
 				if err != nil {
-					t.Errorf("failed to read execute output, executeRes: %+v", executeRes)
+					t.Errorf("failed to read judge output, judgeRes: %+v", judgeRes)
 				}
 
-				assert.Equal(t, stdout, string(bytes), fmt.Sprintf("executeRes: %+v", executeRes))
+				assert.Equal(t, testcaseOutput, judgeOutput)
 			})
 
 		}
@@ -279,4 +303,37 @@ func TestNoCompilation(t *testing.T) {
 	assert.NotNil(t, compileRes)
 	assert.True(t, compileRes.ArtifactFileIDs[conf.SourceName] != "")
 	assert.Equal(t, compileRes.Status, envexec.StatusAccepted)
+}
+
+func TestJudgeOnOutputFile(t *testing.T) {
+	ctx := context.Background()
+	language := "c"
+	codes, err := os.ReadFile("tests/source_outputfile.c")
+	assert.NoError(t, err)
+
+	sub := &model.Submission{Language: language, SourceCode: codes}
+	compileRes, err := judgeManger.Compile(ctx, sub)
+	assert.NotNil(t, compileRes)
+	assert.NoError(t, err)
+
+	if compileRes.Status != envexec.StatusAccepted {
+		stdout, _ := io.ReadAll(compileRes.Stdout)
+		stderr, _ := io.ReadAll(compileRes.Stderr)
+		t.Fatalf("failed to finish compile: compileRes.Status != 0, compile output: \n%s, compileRes: \n%+v",
+			"==stdout==\n"+string(stdout)+"==stderr==\n"+string(stderr), compileRes)
+	}
+
+	p := &model.Problem{
+		DefaultTimeLimit:  uint32(time.Second),
+		DefaultSpaceLimit: 256,
+		DiffPolicy:        model.DiffPolicy_LINE,
+		IgnoreNewline:     true,
+		OutputFile:        "output",
+	}
+
+	judgeRes, err := judgeManger.Judge(ctx, p, language, compileRes.ArtifactFileIDs, testcase)
+	assert.NotNil(t, judgeRes)
+	assert.NoError(t, err)
+
+	assert.Equal(t, model.Conclusion_Accepted, judgeRes.Conclusion)
 }
