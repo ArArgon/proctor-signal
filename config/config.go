@@ -37,6 +37,15 @@ type LanguageConf map[string]LanguageConfEntity
 type Config struct {
 	Level   string `default:"dev" env:"RELEASE" validate:"oneof=production dev debug"` // `production`, `dev`, `debug`
 	Silent  bool   `default:"false" env:"SILENT"`
+	Storage string `default:"http" env:"STORAGE" validate:"oneof=grpc http s3"`
+	OSS     struct {
+		Endpoint        string `default:"localhost" env:"OSS_ENDPOINT"`
+		AccessKeyID     string `default:"" env:"OSS_ACCESS_KEY_ID"`
+		SecretAccessKey string `default:"" env:"OSS_SECRET_ACCESS_KEY"`
+		BucketName      string `default:"" env:"OSS_BUCKET_NAME"`
+		UseTLS          bool   `default:"false" env:"OSS_USE_TLS"`
+		Region          string `default:"" env:"OSS_REGION"`
+	}
 	Backend struct {
 		Addr         string `default:"localhost" env:"BACKEND_ADDR"`
 		GrpcPort     uint   `default:"9003" env:"BACKEND_GRPC_PORT"`
