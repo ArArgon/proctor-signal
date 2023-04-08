@@ -309,6 +309,7 @@ func (m *Manager) Judge(
 	if p.InputFile == "" {
 		stdin = &worker.CachedFile{FileID: fsKey(p, testcase.InputKey)}
 	} else {
+		copyInFileIDs[p.InputFile] = fsKey(p, testcase.InputKey)
 		stdin = &worker.MemoryFile{Content: []byte{}}
 	}
 
@@ -341,6 +342,10 @@ func (m *Manager) Judge(
 		return judgeRes, err
 	}
 
+	if executeRes.Output == nil {
+		judgeRes.Conclusion = model.Conclusion_WrongAnswer
+		return judgeRes, nil
+	}
 	// Only judge on executeRes.Stdout or executeRes.Output, ignore executeRes.Stderr
 	ok, err = composeComparator(p)(testcaseOutputReader, executeRes.Output)
 
@@ -351,8 +356,8 @@ func (m *Manager) Judge(
 
 	judgeRes.Conclusion = lo.Ternary(ok, model.Conclusion_Accepted, model.Conclusion_WrongAnswer)
 
-	// reset executeRes.Stdout
-	if _, err = executeRes.Stdout.Seek(0, 0); err != nil {
+	// reset executeRes.Output
+	if _, err = executeRes.Output.Seek(0, 0); err != nil {
 		return judgeRes, err
 	}
 
