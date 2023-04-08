@@ -241,17 +241,6 @@ func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
 	}
 
 	// read execute output
-	if outputFile != "" {
-		if f, ok := result.Files[outputFile]; ok {
-			size, err := reseekAndGetSize(f)
-			if err != nil {
-				return executeRes, err
-			}
-			executeRes.Output = f
-			executeRes.OutputSize = size
-		}
-	}
-
 	if f, ok := result.Files["stdout"]; ok {
 		size, err := reseekAndGetSize(f)
 		if err != nil {
@@ -268,6 +257,20 @@ func (m *Manager) Execute(ctx context.Context, cmd string, stdin worker.CmdFile,
 		}
 		executeRes.Stderr = f
 		executeRes.StderrSize = size
+	}
+
+	if outputFile == "" {
+		executeRes.Output = executeRes.Stdout
+		executeRes.OutputSize = executeRes.StdoutSize
+	} else {
+		if f, ok := result.Files[outputFile]; ok {
+			size, err := reseekAndGetSize(f)
+			if err != nil {
+				return executeRes, err
+			}
+			executeRes.Output = f
+			executeRes.OutputSize = size
+		}
 	}
 
 	return executeRes, nil
@@ -302,9 +305,15 @@ func (m *Manager) Judge(
 		return nil, fmt.Errorf("config for %s not found", language)
 	}
 
+	var stdin worker.CmdFile
+	if p.InputFile == "" {
+		stdin = &worker.CachedFile{FileID: fsKey(p, testcase.InputKey)}
+	} else {
+		stdin = &worker.MemoryFile{Content: []byte{}}
+	}
+
 	executeRes, err := m.Execute(
-		ctx, strings.Join(conf.getRunCmd(), " "),
-		&worker.CachedFile{FileID: fsKey(p, testcase.InputKey)}, copyInFileIDs, p.OutputFile,
+		ctx, strings.Join(conf.getRunCmd(), " "), stdin, copyInFileIDs, p.OutputFile,
 		time.Duration(p.DefaultTimeLimit)*time.Millisecond*time.Duration(conf.raw.ResourceFactor),
 		runner.Size(p.DefaultSpaceLimit*1024*1024)*runner.Size(conf.raw.ResourceFactor),
 	)
@@ -333,11 +342,7 @@ func (m *Manager) Judge(
 	}
 
 	// Only judge on executeRes.Stdout or executeRes.Output, ignore executeRes.Stderr
-	if p.OutputFile == "" {
-		ok, err = composeComparator(p)(testcaseOutputReader, executeRes.Stdout)
-	} else {
-		ok, err = composeComparator(p)(testcaseOutputReader, executeRes.Output)
-	}
+	ok, err = composeComparator(p)(testcaseOutputReader, executeRes.Output)
 
 	if err != nil {
 		judgeRes.Conclusion = model.Conclusion_InternalError
