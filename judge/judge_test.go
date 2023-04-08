@@ -323,20 +323,96 @@ func TestJudgeByFiles(t *testing.T) {
 			"==stdout==\n"+string(stdout)+"==stderr==\n"+string(stderr), compileRes)
 	}
 
-	p := &model.Problem{
-		DefaultTimeLimit:  uint32(time.Second),
-		DefaultSpaceLimit: 256,
-		DiffPolicy:        model.DiffPolicy_LINE,
-		IgnoreNewline:     true,
-		InputFile:         "input",
-		OutputFile:        "output",
-	}
-	copyInFileIDs := compileRes.ArtifactFileIDs
-	copyInFileIDs["input"] = testcase.InputKey
+	t.Run("file-read-and-write", func(t *testing.T) {
+		p := &model.Problem{
+			DefaultTimeLimit:  uint32(time.Second),
+			DefaultSpaceLimit: 256,
+			DiffPolicy:        model.DiffPolicy_LINE,
+			IgnoreNewline:     true,
+			InputFile:         "input",
+			OutputFile:        "output",
+		}
+		copyInFileIDs := lo.Assign(compileRes.ArtifactFileIDs)
 
-	judgeRes, err := judgeManger.Judge(ctx, p, language, copyInFileIDs, testcase)
-	assert.NotNil(t, judgeRes)
+		judgeRes, err := judgeManger.Judge(ctx, p, language, copyInFileIDs, testcase)
+		assert.NotNil(t, judgeRes)
+		assert.NoError(t, err)
+
+		assert.Equal(t, model.Conclusion_Accepted, judgeRes.Conclusion)
+	})
+
+	t.Run("read-from-stdin", func(t *testing.T) {
+		p := &model.Problem{
+			DefaultTimeLimit:  uint32(time.Second),
+			DefaultSpaceLimit: 256,
+			DiffPolicy:        model.DiffPolicy_LINE,
+			IgnoreNewline:     true,
+			OutputFile:        "output",
+		}
+		copyInFileIDs := lo.Assign(compileRes.ArtifactFileIDs)
+
+		judgeRes, err := judgeManger.Judge(ctx, p, language, copyInFileIDs, testcase)
+		assert.NotNil(t, judgeRes)
+		assert.NoError(t, err)
+
+		assert.NotEqual(t, model.Conclusion_InternalError, judgeRes.Conclusion)
+		assert.NotEqual(t, model.Conclusion_Accepted, judgeRes.Conclusion)
+	})
+
+	t.Run("write-to-stdout", func(t *testing.T) {
+		p := &model.Problem{
+			DefaultTimeLimit:  uint32(time.Second),
+			DefaultSpaceLimit: 256,
+			DiffPolicy:        model.DiffPolicy_LINE,
+			IgnoreNewline:     true,
+			InputFile:         "input",
+		}
+		copyInFileIDs := lo.Assign(compileRes.ArtifactFileIDs)
+
+		judgeRes, err := judgeManger.Judge(ctx, p, language, copyInFileIDs, testcase)
+		assert.NotNil(t, judgeRes)
+		assert.NoError(t, err)
+
+		assert.Equal(t, model.Conclusion_WrongAnswer, judgeRes.Conclusion)
+		assert.EqualValues(t, 0, judgeRes.OutputSize)
+	})
+}
+
+func TestJudgeByFiles2(t *testing.T) {
+	ctx := context.Background()
+	language := "c"
+	// tests/source.c reads from stdin and outputs to stdout.
+	codes, err := os.ReadFile("tests/source.c")
 	assert.NoError(t, err)
 
-	assert.Equal(t, model.Conclusion_Accepted, judgeRes.Conclusion)
+	sub := &model.Submission{Language: language, SourceCode: codes}
+	compileRes, err := judgeManger.Compile(ctx, sub)
+	assert.NotNil(t, compileRes)
+	assert.NoError(t, err)
+
+	if compileRes.Status != envexec.StatusAccepted {
+		stdout, _ := io.ReadAll(compileRes.Stdout)
+		stderr, _ := io.ReadAll(compileRes.Stderr)
+		t.Fatalf("failed to finish compile: compileRes.Status != 0, compile output: \n%s, compileRes: \n%+v",
+			"==stdout==\n"+string(stdout)+"==stderr==\n"+string(stderr), compileRes)
+	}
+
+	t.Run("file-read-and-write", func(t *testing.T) {
+		p := &model.Problem{
+			DefaultTimeLimit:  uint32(time.Second),
+			DefaultSpaceLimit: 256,
+			DiffPolicy:        model.DiffPolicy_LINE,
+			IgnoreNewline:     true,
+			InputFile:         "input",
+			OutputFile:        "output",
+		}
+		copyInFileIDs := lo.Assign(compileRes.ArtifactFileIDs)
+
+		judgeRes, err := judgeManger.Judge(ctx, p, language, copyInFileIDs, testcase)
+		assert.NotNil(t, judgeRes)
+		assert.NoError(t, err)
+
+		assert.NotEqual(t, model.Conclusion_InternalError, judgeRes.Conclusion)
+		assert.NotEqual(t, model.Conclusion_Accepted, judgeRes.Conclusion)
+	})
 }

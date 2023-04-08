@@ -287,7 +287,7 @@ func (w *Worker) judgeOnDAG(
 			judgeRes, err = w.judge.Judge(ctx, p, sub.Language, artifactIDs, testcase)
 			if judgeRes != nil {
 				outputFileCaches = append(outputFileCaches, judgeRes.Stdout, judgeRes.Stderr)
-				if judgeRes.Output != nil {
+				if judgeRes.Output != nil && p.OutputFile != "" {
 					outputFileCaches = append(outputFileCaches, judgeRes.Output)
 				}
 			}
@@ -304,7 +304,7 @@ func (w *Worker) judgeOnDAG(
 			caseResult.TotalTime = uint32(judgeRes.TotalTime.Milliseconds())
 			caseResult.TotalSpace = float32(judgeRes.TotalSpace.KiB()) / 1024
 			caseResult.ReturnValue = int32(judgeRes.ExitStatus)
-			caseResult.OutputSize = uint64(judgeRes.StdoutSize)
+			caseResult.OutputSize = uint64(judgeRes.OutputSize)
 
 			// case output handle
 			if judgeRes.OutputSize != 0 {
