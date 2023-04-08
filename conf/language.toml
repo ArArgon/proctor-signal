@@ -2,22 +2,22 @@
 SourceName = 'source.cpp'
 ArtifactName = 'a.out'
 Compiler = '/usr/bin/g++'
-CompileCmd = "$Compiler $Args ${SourceName} -o ${ArtifactName}"
+CompileCmd = "$Compiler -Wall $Args ${SourceName} -o ${ArtifactName}"
 CompileTimeLimit = 20000 # ms
 CompileSpaceLimit = 134217728 # 128MB
 ExecuteCmd = "a.out"
-Options = { o2 = "-O2", cpp14 = "--std=c++14", cpp17 = "--std=c++17", cpp11 = "--std=c++11" }
+Options = { o2 = "-O2", cpp14 = "--std=c++14", cpp17 = "--std=c++17", cpp11 = "--std=c++11", strict = "-fsanitize=address -fno-omit-frame-pointer" }
 ResourceFactor = 1
 
 [languageConf.c]
 SourceName = 'source.c'
 ArtifactName = 'a.out'
 Compiler = '/usr/bin/gcc'
-CompileCmd = "$Compiler $Args ${SourceName} -o ${ArtifactName}"
+CompileCmd = "$Compiler -Wall $Args ${SourceName} -o ${ArtifactName}"
 CompileTimeLimit = 10000 # ms
 CompileSpaceLimit = 134217728 # 128MB
 ExecuteCmd = "a.out"
-Options = { o2 = "-O2", c11 = "--std=c11" }
+Options = { o2 = "-O2", c11 = "--std=c11", strict = "-fsanitize=address -fno-omit-frame-pointer" }
 ResourceFactor = 1
 
 [languageConf.java]

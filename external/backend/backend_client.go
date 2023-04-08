@@ -113,10 +113,7 @@ func newResourceClient(
 }
 
 func (c *client) ReportExit(ctx context.Context, reason string) error {
-	if err := c.auth.reportExit(ctx, reason); err != nil {
-		return errors.WithMessage(err, "failed to inform the backend server")
-	}
-	return nil
+	return c.auth.reportExit(ctx, reason)
 }
 
 func (c *client) ping(ctx context.Context, sugar *zap.SugaredLogger, cancel context.CancelFunc) {
