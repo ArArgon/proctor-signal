@@ -307,13 +307,17 @@ func (w *Worker) judgeOnDAG(
 			caseResult.OutputSize = uint64(judgeRes.OutputSize)
 
 			// case output handle
-			if judgeRes.OutputSize != 0 {
+			if judgeRes.OutputSize != 0 && judgeRes.ExitStatus == 0 {
 				buffLen := lo.Clamp(judgeRes.OutputSize, 0, int64(w.conf.JudgeOptions.MaxTruncatedOutput))
 				caseResult.TruncatedOutput = lo.ToPtr(truncate(judgeRes.Output, "", buffLen))
 				// Upload the output data when exceeding the record's limit.
 				if judgeRes.OutputSize > buffLen {
 					caseOutputCh <- &caseOutput{caseResult: caseResult, outputFile: judgeRes.Output}
 				}
+			} else {
+				// All erroneously exited programs' output are replaced with stderr.
+				buffLen := lo.Clamp(judgeRes.StderrSize, 0, int64(w.conf.JudgeOptions.MaxTruncatedOutput))
+				caseResult.TruncatedOutput = lo.ToPtr(truncate(judgeRes.Stderr, "", buffLen))
 			}
 
 			subResult.TotalTime += caseResult.TotalTime
