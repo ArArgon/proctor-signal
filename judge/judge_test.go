@@ -305,10 +305,10 @@ func TestNoCompilation(t *testing.T) {
 	assert.Equal(t, compileRes.Status, envexec.StatusAccepted)
 }
 
-func TestJudgeOnOutputFile(t *testing.T) {
+func TestJudgeByFiles(t *testing.T) {
 	ctx := context.Background()
 	language := "c"
-	codes, err := os.ReadFile("tests/source_outputfile.c")
+	codes, err := os.ReadFile("tests/source_from_files.c")
 	assert.NoError(t, err)
 
 	sub := &model.Submission{Language: language, SourceCode: codes}
@@ -328,10 +328,13 @@ func TestJudgeOnOutputFile(t *testing.T) {
 		DefaultSpaceLimit: 256,
 		DiffPolicy:        model.DiffPolicy_LINE,
 		IgnoreNewline:     true,
+		InputFile:         "input",
 		OutputFile:        "output",
 	}
+	copyInFileIDs := compileRes.ArtifactFileIDs
+	copyInFileIDs["input"] = testcase.InputKey
 
-	judgeRes, err := judgeManger.Judge(ctx, p, language, compileRes.ArtifactFileIDs, testcase)
+	judgeRes, err := judgeManger.Judge(ctx, p, language, copyInFileIDs, testcase)
 	assert.NotNil(t, judgeRes)
 	assert.NoError(t, err)
 

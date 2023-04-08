@@ -307,23 +307,12 @@ func (w *Worker) judgeOnDAG(
 			caseResult.OutputSize = uint64(judgeRes.StdoutSize)
 
 			// case output handle
-			if p.OutputFile == "" {
-				if judgeRes.StdoutSize != 0 {
-					buffLen := lo.Clamp(judgeRes.StdoutSize, 0, int64(w.conf.JudgeOptions.MaxTruncatedOutput))
-					caseResult.TruncatedOutput = lo.ToPtr(truncate(judgeRes.Stdout, "", buffLen))
-					// Upload the output data when exceeding the record's limit.
-					if judgeRes.StdoutSize > buffLen {
-						caseOutputCh <- &caseOutput{caseResult: caseResult, outputFile: judgeRes.Stdout}
-					}
-				}
-			} else {
-				if judgeRes.OutputSize != 0 {
-					buffLen := lo.Clamp(judgeRes.OutputSize, 0, int64(w.conf.JudgeOptions.MaxTruncatedOutput))
-					caseResult.TruncatedOutput = lo.ToPtr(truncate(judgeRes.Output, "", buffLen))
-					// Upload the output data when exceeding the record's limit.
-					if judgeRes.OutputSize > buffLen {
-						caseOutputCh <- &caseOutput{caseResult: caseResult, outputFile: judgeRes.Output}
-					}
+			if judgeRes.OutputSize != 0 {
+				buffLen := lo.Clamp(judgeRes.OutputSize, 0, int64(w.conf.JudgeOptions.MaxTruncatedOutput))
+				caseResult.TruncatedOutput = lo.ToPtr(truncate(judgeRes.Output, "", buffLen))
+				// Upload the output data when exceeding the record's limit.
+				if judgeRes.OutputSize > buffLen {
+					caseOutputCh <- &caseOutput{caseResult: caseResult, outputFile: judgeRes.Output}
 				}
 			}
 
