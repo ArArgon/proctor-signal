@@ -6,7 +6,7 @@ CompileCmd = "$Compiler -Wall $Args ${SourceName} -o ${ArtifactName}"
 CompileTimeLimit = 20000 # ms
 CompileSpaceLimit = 134217728 # 128MB
 ExecuteCmd = "a.out"
-Options = { o2 = "-O2", cpp14 = "--std=c++14", cpp17 = "--std=c++17", cpp11 = "--std=c++11", strict = "-fsanitize=address -fno-omit-frame-pointer" }
+Options = { o1 = "-O1", o2 = "-O2", o0 = "-O0", cpp03 = "--std=c++03", cpp11 = "--std=c++11", cpp14 = "--std=c++14", cpp17 = "--std=c++17", strict = "-fsanitize=address -fno-omit-frame-pointer" }
 ResourceFactor = 1
 
 [languageConf.c]
@@ -17,7 +17,7 @@ CompileCmd = "$Compiler -Wall $Args ${SourceName} -o ${ArtifactName}"
 CompileTimeLimit = 10000 # ms
 CompileSpaceLimit = 134217728 # 128MB
 ExecuteCmd = "a.out"
-Options = { o2 = "-O2", c11 = "--std=c11", strict = "-fsanitize=address -fno-omit-frame-pointer" }
+Options = { o1 = "-O1", o2 = "-O2", o0 = "-O0", c99 = "--std=c99", c11 = "--std=c11", strict = "-fsanitize=address -fno-omit-frame-pointer" }
 ResourceFactor = 1
 
 [languageConf.java]
@@ -29,7 +29,7 @@ CompileCmd = "$Compiler -encoding utf-8 $Args $SourceName"
 CompileTimeLimit = 20000 # ms
 CompileSpaceLimit = 536870912 # 512MB
 ExecuteCmd = "$JAVA_HOME/bin/java $CLASS_NAME"
-Options = { "java11" = "--source 11", "java8" = "--source 8" }
+Options = { "java11" = "--source 11", "java8" = "--source 8", "java17" = "" }
 ResourceFactor = 2
 
 [languageConf.python]
