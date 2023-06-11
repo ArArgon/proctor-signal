@@ -162,9 +162,10 @@ func (a *authManager) updateToken(accessToken string) error {
 	c := claim.Claims.(*jwtClaim)
 	a.instanceID = c.InstanceID
 	a.noExpiration = c.ExpiresAt == nil || c.ExpiresAt.IsZero()
-	a.expireTime = lo.Ternary(a.noExpiration, c.ExpiresAt.Time, time.Time{})
+	a.expireTime = lo.Ternary(a.noExpiration, time.Time{}, c.ExpiresAt.Time)
 	a.accessToken = accessToken
 
+	a.logger.Sugar().Infof("token updated, will expire at: %v", a.expireTime)
 	return nil
 }
 
