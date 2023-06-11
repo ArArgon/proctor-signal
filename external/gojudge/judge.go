@@ -59,7 +59,7 @@ func Prefork(envPool worker.EnvironmentPool, prefork int) {
 }
 
 func NewEnvBuilder(conf *config.JudgeConfig) pool.EnvBuilder {
-	b, err := env.NewBuilder(env.Config{
+	b, _, err := env.NewBuilder(env.Config{
 		ContainerInitPath:  conf.ContainerInitPath,
 		MountConf:          conf.MountConf,
 		TmpFsParam:         conf.TmpFsParam,

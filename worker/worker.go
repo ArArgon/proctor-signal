@@ -273,6 +273,7 @@ func (w *Worker) judgeOnDAG(
 	go uploader(ctx, sugar, w.backend, uploadFinishCh, caseOutputCh)
 
 	dag.Traverse(func(subtask *model.Subtask) bool {
+		passCases := 0
 		subResult := score[subtask.Id]
 		subResult.IsRun = true
 		subResult.Conclusion = model.Conclusion_Accepted
@@ -303,20 +304,18 @@ func (w *Worker) judgeOnDAG(
 			caseResult.TotalTime = uint32(judgeRes.TotalTime.Milliseconds())
 			caseResult.TotalSpace = float32(judgeRes.TotalSpace.KiB()) / 1024
 			caseResult.ReturnValue = int32(judgeRes.ExitStatus)
-			caseResult.OutputSize = uint64(judgeRes.OutputSize)
 
-			// case output handle
-			if judgeRes.OutputSize != 0 && judgeRes.ExitStatus == 0 {
-				buffLen := lo.Clamp(judgeRes.OutputSize, 0, int64(w.conf.JudgeOptions.MaxTruncatedOutput))
-				caseResult.TruncatedOutput = lo.ToPtr(truncate(judgeRes.Output, "", buffLen))
-				// Upload the output data when exceeding the record's limit.
-				if judgeRes.OutputSize > buffLen {
-					caseOutputCh <- &caseOutput{caseResult: caseResult, outputFile: judgeRes.Output}
-				}
-			} else {
-				// All erroneously exited programs' output are replaced with stderr.
-				buffLen := lo.Clamp(judgeRes.StderrSize, 0, int64(w.conf.JudgeOptions.MaxTruncatedOutput))
-				caseResult.TruncatedOutput = lo.ToPtr(truncate(judgeRes.Stderr, "", buffLen))
+			// Handle output. All erroneously exited programs' output are replaced with stderr.
+			fromOutput := judgeRes.ExitStatus == 0
+			outputSize := lo.Ternary(fromOutput, judgeRes.OutputSize, judgeRes.StderrSize)
+			outputFile := lo.Ternary(fromOutput, judgeRes.Output, judgeRes.Stderr)
+			caseResult.OutputSize = uint64(outputSize)
+			buffLen := lo.Clamp(outputSize, 0, int64(w.conf.JudgeOptions.MaxTruncatedOutput))
+			caseResult.TruncatedOutput = lo.ToPtr(truncate(outputFile, "", buffLen))
+
+			// Upload the output data when exceeding the record's limit.
+			if outputSize > buffLen {
+				caseOutputCh <- &caseOutput{caseResult: caseResult, outputFile: outputFile}
 			}
 
 			subResult.TotalTime += caseResult.TotalTime
@@ -326,13 +325,11 @@ func (w *Worker) judgeOnDAG(
 
 			// Score
 			if judgeRes.Conclusion == model.Conclusion_Accepted {
-				// TODO: add Testcase.Score
+				passCases++
 				caseResult.Score = subtask.Score / int32(len(subtask.TestCases))
 				switch subtask.ScorePolicy {
 				case model.ScorePolicy_SUM:
 					subResult.Score += caseResult.Score
-				case model.ScorePolicy_PCT:
-					subResult.Score += caseResult.Score / int32(len(subtask.TestCases))
 				case model.ScorePolicy_MIN:
 					if subResult.Score > caseResult.Score {
 						subResult.Score = caseResult.Score
@@ -341,6 +338,10 @@ func (w *Worker) judgeOnDAG(
 				continue
 			}
 			subResult.Conclusion = judgeRes.Conclusion
+		}
+
+		if subtask.ScorePolicy == model.ScorePolicy_PCT {
+			subResult.Score = int32(float64(subtask.Score) * (float64(passCases) / float64(len(subtask.TestCases))))
 		}
 		return true
 	})
