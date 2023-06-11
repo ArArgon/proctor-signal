@@ -178,7 +178,6 @@ func (w *Worker) fetch(ctx context.Context, sugar *zap.SugaredLogger,
 
 	// No Content.
 	if task.StatusCode == 204 {
-		sugar.With("reason", task.GetReason()).Debug("no content received")
 		return nil, true, nil
 	}
 
